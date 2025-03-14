@@ -60,10 +60,18 @@ def get_all_transcripts():
     return session.query(Transcript).order_by(Transcript.created_at.desc()).all()
 
 def delete_transcript(transcript_id):
-    """Delete a transcript by ID"""
-    transcript = session.query(Transcript).filter(Transcript.id == transcript_id).first()
-    if transcript:
-        session.delete(transcript)
-        session.commit()
-        return True
-    return False
+    """Delete a transcript from the database by ID"""
+    session = Session()
+    try:
+        transcript = session.query(Transcript).filter(Transcript.id == transcript_id).first()
+        if transcript:
+            session.delete(transcript)
+            session.commit()
+            return True
+        return False
+    except Exception as e:
+        session.rollback()
+        print(f"Error deleting transcript: {e}")
+        return False
+    finally:
+        session.close()
