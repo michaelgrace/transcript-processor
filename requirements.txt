@@ -1,0 +1,6 @@
+streamlit==1.31.0
+python-dotenv==1.0.0
+openai==0.28.0  # Downgraded to last version with ChatCompletion support
+sqlalchemy==2.0.25
+pysrt==1.1.2
+markdown==3.5.1

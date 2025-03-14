@@ -1,0 +1,17 @@
+version: '3'
+
+services:
+  app:
+    build: .
+    ports:
+      - "8501:8501"
+    volumes:
+      - .:/app
+      - ./data:/app/data
+    env_file:
+      - .env
+    restart: unless-stopped
+    environment:
+      - API_KEY=${API_KEY}
+      - AI_MODEL=${AI_MODEL}
+      - DB_PATH=${DB_PATH}
