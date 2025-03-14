@@ -1,15 +1,21 @@
 FROM python:3.11-slim
 
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Set working directory
 WORKDIR /app
 
-COPY requirements.txt .
+# Install dependencies
+COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+# Copy application code
+COPY . /app/
 
-# Create data directory and ensure permissions
-RUN mkdir -p data && chmod 777 data
-
+# Expose port
 EXPOSE 8501
 
+# Run the application
 CMD ["streamlit", "run", "app/main.py"]

@@ -2,12 +2,12 @@ import os
 import re
 import pysrt
 from dotenv import load_dotenv
-import openai
+import openai  # Import the module, not the class
 import streamlit as st
 
 load_dotenv()
 
-# Configure OpenAI
+# Configure OpenAI with the older style
 openai.api_key = os.getenv("API_KEY")
 AI_MODEL = os.getenv("AI_MODEL", "gpt-4")
 
@@ -66,9 +66,8 @@ def format_text(text, add_paragraphs=True, add_headings=True, fix_grammar=True, 
    - Focus on structure and readability only"""
 
         print(f"Using model: {AI_MODEL}")
-        print(f"System prompt: {system_prompt}")
-
-        # Call the OpenAI API using the new interface
+        
+        # Use the older API format that's compatible with openai==0.28.0
         response = openai.ChatCompletion.create(
             model=AI_MODEL,
             messages=[
@@ -78,16 +77,15 @@ def format_text(text, add_paragraphs=True, add_headings=True, fix_grammar=True, 
             temperature=0.3,
             max_tokens=4096
         )
-
-        print(f"API response status: Success")
-        formatted_text = response['choices'][0]['message']['content']
         
-        # Verify formatting
+        # Extract the response content using the older format
+        formatted_text = response.choices[0].message["content"]
+        
         if not formatted_text.strip():
             raise ValueError("AI returned empty response")
-        
+            
         return formatted_text
-
+        
     except Exception as e:
         error_message = f"❌ AI FORMATTING ERROR: {str(e)}"
         print(error_message)
