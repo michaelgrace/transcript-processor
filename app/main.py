@@ -1,9 +1,10 @@
 import streamlit as st
 import os
-from processor import detect_and_process
-from database import save_transcript, get_transcript, get_all_transcripts, delete_transcript
+from processor import detect_and_process, generate_post_ideas
+from database import save_transcript, get_transcript, get_all_transcripts, delete_transcript, save_post_ideas, get_post_ideas, delete_post_ideas
 import markdown
 import re
+import time
 
 # Configure the page with minimal padding
 st.set_page_config(page_title="Transcript Processor", layout="wide")
@@ -57,12 +58,28 @@ with st.expander("Formatting Options", expanded=True):
     col1, col2 = st.columns(2)
     
     with col1:
-        add_paragraphs = st.checkbox("Paragraph Structure", value=True)
-        add_headings = st.checkbox("Add Headings for Topics", value=True)
+        add_paragraphs = st.checkbox(
+            "Paragraph Structure", 
+            value=True,
+            help="Organize content into logical paragraphs based on topics"
+        )
+        add_headings = st.checkbox(
+            "Add Headings for Topics", 
+            value=True,
+            help="Insert section headings to highlight main topics"
+        )
     
     with col2:
-        fix_grammar = st.checkbox("Fix Grammar & Punctuation", value=True)
-        highlight_key_points = st.checkbox("Highlight Key Points", value=True)
+        fix_grammar = st.checkbox(
+            "Fix Grammar & Punctuation", 
+            value=True,
+            help="Correct grammar and punctuation while preserving meaning"
+        )
+        highlight_key_points = st.checkbox(
+            "Highlight Key Points", 
+            value=True,
+            help="Bold important concepts and conclusions"
+        )
     
     format_style = st.radio(
         "Document Style",
@@ -131,19 +148,50 @@ if 'delete_transcript' in st.session_state and st.session_state.delete_transcrip
     st.session_state.delete_transcript = None
     st.rerun()
 
-# Display past transcripts
+# Initialize session state
+if 'show_ideas_tab' not in st.session_state:
+    st.session_state.show_ideas_tab = {}
+    
+if 'generating_ideas' not in st.session_state:
+    st.session_state.generating_ideas = {}
+
+if 'post_ideas' not in st.session_state:
+    st.session_state.post_ideas = {}
+
+# Update the section that initializes the transcript state
+
 transcripts = get_all_transcripts()
 if transcripts:
     for i, transcript in enumerate(transcripts):
-        # Store delete button state in session state
         delete_key = f"delete_{transcript.id}"
-        
-        # Put the title inside the expander
+        ideas_key = f"ideas_{transcript.id}"
         expander_label = f"**{transcript.filename}** (ID: {transcript.id})"
         
         with st.expander(expander_label):
-            # Make processed tab default
-            processed_tab, original_tab = st.tabs(["Processed", "Original"])
+            # Initialize state for this transcript if needed
+            if transcript.id not in st.session_state.show_ideas_tab:
+                # Check if post ideas exist for this transcript in the database
+                existing_ideas = get_post_ideas(transcript.id)
+                
+                # If ideas exist in DB, show the tab automatically
+                st.session_state.show_ideas_tab[transcript.id] = existing_ideas is not None
+                st.session_state.generating_ideas[transcript.id] = False
+                
+                # Store the ideas content in session state if available
+                if existing_ideas:
+                    st.session_state.post_ideas[transcript.id] = existing_ideas["content"]
+            
+            # Get current state
+            show_ideas = st.session_state.show_ideas_tab[transcript.id]
+            
+            # Rest of your code...
+            
+            # Simplify this tab creation code
+            if show_ideas:
+                # Use standard order always
+                processed_tab, original_tab, ideas_tab = st.tabs(["Processed", "Original", "Post Ideas"])
+            else:
+                processed_tab, original_tab = st.tabs(["Processed", "Original"])
             
             with original_tab:
                 st.text_area("Original Content", transcript.original_content, height=200)
@@ -170,5 +218,63 @@ if transcripts:
                 if st.button("Delete Transcript", key=delete_key):
                     st.session_state.delete_transcript = transcript.id
                     st.rerun()
+                
+                # Add Post Ideas button
+                if st.button("Post Ideas", key=ideas_key):
+                    # Toggle the state
+                    st.session_state.show_ideas_tab[transcript.id] = True
+                    st.session_state.generating_ideas[transcript.id] = True
+                    st.rerun()
+            
+            # Handle Ideas tab if activated
+            if show_ideas:
+                with ideas_tab:
+                    # Check if we need to generate ideas or load from database
+                    if st.session_state.generating_ideas[transcript.id]:
+                        with st.spinner("Generating post ideas..."):
+                            # Either load existing ideas or generate new ones
+                            existing_ideas = get_post_ideas(transcript.id)
+                            
+                            if existing_ideas:
+                                ideas_content = existing_ideas["content"]
+                                st.session_state.post_ideas[transcript.id] = ideas_content
+                            else:
+                                # Generate new ideas
+                                ideas_content = generate_post_ideas(clean_content)
+                                st.session_state.post_ideas[transcript.id] = ideas_content
+                                
+                            # Reset the generating flag
+                            st.session_state.generating_ideas[transcript.id] = False
+                    
+                    # Display ideas content
+                    if transcript.id in st.session_state.post_ideas:
+                        st.markdown(st.session_state.post_ideas[transcript.id])
+                        
+                        # Add action buttons
+                        col1, col2, col3 = st.columns(3)
+                        
+                        with col1:
+                            # Regenerate button
+                            if st.button("Regenerate Ideas", key=f"regenerate_{transcript.id}"):
+                                st.session_state.generating_ideas[transcript.id] = True
+                                st.rerun()
+                                
+                        with col2:
+                            # Save button
+                            if st.button("Save Ideas", key=f"save_ideas_{transcript.id}"):
+                                save_post_ideas(transcript.id, st.session_state.post_ideas[transcript.id])
+                                st.success("Ideas saved successfully!")
+                                
+                        with col3:
+                            # Delete button
+                            if st.button("Delete Ideas", key=f"delete_ideas_{transcript.id}"):
+                                success = delete_post_ideas(transcript.id)
+                                if success:
+                                    st.success("Ideas deleted successfully")
+                                    st.session_state.post_ideas.pop(transcript.id, None)
+                                    st.session_state.show_ideas_tab[transcript.id] = False
+                                    st.rerun()
+                                else:
+                                    st.error("Failed to delete ideas from database")
 else:
     st.info("No transcripts have been processed yet.")

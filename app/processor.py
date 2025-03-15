@@ -34,63 +34,62 @@ def process_text(content, add_paragraphs=True, add_headings=True, fix_grammar=Tr
     return format_text(content, add_paragraphs, add_headings, fix_grammar, highlight_key_points, format_style)
 
 def format_text(text, add_paragraphs=True, add_headings=True, fix_grammar=True, highlight_key_points=True, format_style="Article"):
-    """Format text using AI to add proper structure with detailed instructions"""
+    """Format text using OpenAI API"""
+    
+    # Build the system prompt based on formatting options
+    system_instructions = [
+        "You are an expert transcript formatter and editor.",
+        "Your task is to improve the readability of transcripts while maintaining their original meaning."
+    ]
+    
+    # Add specific formatting instructions based on user selections
+    if add_paragraphs:
+        system_instructions.append("Organize the content into clear, logical paragraphs based on topic changes or natural breaks in conversation.")
+    
+    if add_headings:
+        system_instructions.append("Insert appropriate section headings (using markdown # syntax) to highlight main topics and improve document structure.")
+    
+    if fix_grammar:
+        system_instructions.append("Fix grammar, punctuation, and sentence structure while preserving the original meaning.")
+    else:
+        system_instructions.append("Maintain the original grammar and sentence structure.")
+    
+    if highlight_key_points:
+        system_instructions.append("Highlight key points, important concepts, or conclusions using **bold** markdown formatting.")
+    
+    # Add style-specific formatting instructions
+    if format_style == "Article":
+        system_instructions.append("Format the text as a polished article with a clear introduction, body, and conclusion.")
+        system_instructions.append("Use a professional, journalistic tone.")
+    elif format_style == "Transcript":
+        system_instructions.append("Maintain the conversational back-and-forth nature of the transcript.")
+        system_instructions.append("Clearly indicate speaker changes with bold formatting (e.g., **Speaker 1:**).")
+    elif format_style == "Meeting Notes":
+        system_instructions.append("Format as concise meeting notes with clear action items and decisions.")
+        system_instructions.append("Use bullet points for lists and action items.")
+        system_instructions.append("Summarize discussions rather than including all dialogue.")
+    elif format_style == "Academic":
+        system_instructions.append("Format with a formal academic style, using appropriate scholarly language.")
+        system_instructions.append("Organize with clear thesis statements and supporting evidence.")
+        system_instructions.append("Use numbered sections for different topics or arguments.")
+    
+    system_prompt = "\n".join(system_instructions)
+    
     try:
-        system_prompt = """You are an expert in natural language processing and document formatting. Your task is to transform spoken word transcripts into well-structured text while preserving the natural flow of speech.
-
-1. Natural Language Analysis:
-   - Identify complete thoughts and ideas
-   - Recognize natural speech patterns and pauses
-   - Detect topic transitions
-   - Understand speaker's rhythm and flow
-
-2. Formatting Instructions:
-   - Create proper sentences that maintain the speaker's natural cadence
-   - Group related ideas into coherent paragraphs
-   - Add clear topic headings that reflect the content
-   - Use markdown for structure (## for headings)
-   - Add bullet points (*) for lists or emphasized points
-
-3. Specific Requirements:
-   - End sentences at natural pauses and complete thoughts
-   - Start new paragraphs when topics shift
-   - Preserve the speaker's original words and meaning
-   - Remove unnecessary periods and fix punctuation
-   - Maintain the conversational tone while improving readability
-
-4. CRITICAL RULES:
-   - Preserve ALL original content
-   - Keep the speaker's authentic voice
-   - Don't summarize or remove anything
-   - Don't add interpretations or new content
-   - Focus on structure and readability only"""
-
-        print(f"Using model: {AI_MODEL}")
-        
-        # Use the older API format that's compatible with openai==0.28.0
         response = openai.ChatCompletion.create(
             model=AI_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": "This is a spoken word transcript that needs to be formatted into clear sentences and paragraphs while preserving the natural flow of speech. Format this text:\n\n" + text}
+                {"role": "user", "content": f"Please format this transcript:\n\n{text}"}
             ],
-            temperature=0.3,
-            max_tokens=4096
+            temperature=0.3  # Lower temperature for more consistent formatting
         )
         
-        # Extract the response content using the older format
         formatted_text = response.choices[0].message["content"]
-        
-        if not formatted_text.strip():
-            raise ValueError("AI returned empty response")
-            
         return formatted_text
-        
     except Exception as e:
-        error_message = f"❌ AI FORMATTING ERROR: {str(e)}"
-        print(error_message)
-        st.error(error_message)
-        return f"Error processing with AI: {str(e)}\n\nOriginal text:\n{text}"
+        print(f"Error formatting text: {e}")
+        return text  # Return original text if formatting fails
 
 def detect_and_process(file_content, filename, add_paragraphs=True, add_headings=True, fix_grammar=True, highlight_key_points=True, format_style="Article"):
     """Detect file type and process accordingly with formatting options"""
@@ -98,3 +97,58 @@ def detect_and_process(file_content, filename, add_paragraphs=True, add_headings
         return process_srt(file_content, add_paragraphs, add_headings, fix_grammar, highlight_key_points, format_style)
     else:
         return process_text(file_content, add_paragraphs, add_headings, fix_grammar, highlight_key_points, format_style)
+
+def generate_post_ideas(transcript_content):
+    """Generate content ideas for social media posts based on a transcript"""
+    try:
+        system_prompt = """You are an expert content creator specializing in helping creators repurpose their content across platforms. 
+        Your task is to analyze a transcript and generate creative ideas for social media posts and videos.
+
+        Based on the provided transcript, generate the following:
+
+        1. YouTube Titles: Compelling and intriguing video titles.
+        2. Curiosity Hooks: Engaging opening lines to capture attention.
+        3. Thumbnail Concepts: Ideas with clear text and imagery for easy visualization.
+        4. Search Questions: Possible viewer queries that might lead them to the video.
+        5. Viewer Problems: Potential issues viewers are trying to solve when they find the video.
+        6. Related Topics: Subjects relevant to the video's theme.
+
+        If the transcript is lengthy, generate 5 ideas for each category.
+        If the transcript is short, generate at least 3 ideas for each category.
+
+        Format your answer with clear headings using markdown.
+        """
+
+        # Check length of transcript to determine how many ideas to generate
+        is_short = len(transcript_content.split()) < 300  # Arbitrary threshold for "short" transcript
+        
+        user_prompt = f"The following is a transcript of content. Please analyze it and generate content ideas:\n\n{transcript_content}"
+        if is_short:
+            user_prompt += "\n\nThis transcript is relatively short, so please generate at least 3 ideas for each category."
+        else:
+            user_prompt += "\n\nThis transcript is substantial, so please generate at least 5 ideas for each category."
+
+        # Call OpenAI API
+        response = openai.ChatCompletion.create(
+            model=AI_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.7,  # Higher temperature for more creativity
+            max_tokens=2048
+        )
+        
+        # Extract the response content
+        ideas = response.choices[0].message["content"]
+        
+        if not ideas.strip():
+            raise ValueError("AI returned empty response")
+            
+        return ideas
+        
+    except Exception as e:
+        error_message = f"❌ POST IDEAS GENERATION ERROR: {str(e)}"
+        print(error_message)
+        st.error(error_message)
+        return f"Error generating post ideas: {str(e)}"
