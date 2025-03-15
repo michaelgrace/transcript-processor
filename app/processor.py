@@ -152,3 +152,117 @@ def generate_post_ideas(transcript_content):
         print(error_message)
         st.error(error_message)
         return f"Error generating post ideas: {str(e)}"
+
+def rewrite_transcript(content, options):
+    """
+    Rewrite a transcript based on selected style options
+    
+    Args:
+        content (str): The transcript content to rewrite
+        options (list): List of selected style options
+            - "clear_simple" - Clear language at 8th grade level
+            - "professional" - Business appropriate tone
+            - "storytelling" - Narrative structure with flow
+            - "youtube_script" - Structured for video
+            - "educational" - Explains concepts clearly
+            - "balanced" - Mature but approachable
+            - "shorter" - Reduce word count by ~25%
+            - "longer" - Expand content by ~25%
+    
+    Returns:
+        str: The rewritten transcript
+    """
+    
+    # Validate options
+    if "shorter" in options and "longer" in options:
+        return "ERROR: Cannot select both 'Shorter' and 'Longer' options. Please choose only one."
+    
+    # Word and phrase blacklist
+    blacklisted_terms = [
+        "realm",
+        "delve", 
+        "dive in",
+        "what if I told you",
+        "profound"
+    ]
+    
+    # Build the system prompt based on selected options
+    system_instructions = [
+        "You are an expert content editor specializing in rewriting and reformatting transcripts.",
+        "Your task is to rewrite the provided transcript according to the specified style options while preserving the original meaning and information.",
+        "",
+        "IMPORTANT: You must NEVER use the following words or phrases in your rewrite:",
+    ]
+    
+    # Add blacklisted terms to instructions
+    for term in blacklisted_terms:
+        system_instructions.append(f"- \"{term}\"")
+    
+    system_instructions.append("")
+    system_instructions.append("If you feel tempted to use any of these terms, find alternative expressions instead.")
+    
+    # Add specific style instructions based on user selections
+    if "clear_simple" in options:
+        system_instructions.append("Use clear, confident language suitable for an 8th-grade reading level.")
+        system_instructions.append("Be authoritative but avoid overly complex vocabulary or jargon.")
+        system_instructions.append("Explain complex ideas in simple terms while maintaining accuracy.")
+    
+    if "professional" in options:
+        system_instructions.append("Use a balanced, measured tone appropriate for business contexts.")
+        system_instructions.append("Be precise and thoughtful, avoiding filler language.")
+        system_instructions.append("Maintain a warm yet professional distance - neither overly formal nor casual.")
+    
+    if "storytelling" in options:
+        system_instructions.append("Reshape the content into a narrative flow with a clear beginning, middle, and end.")
+        system_instructions.append("Use descriptive language and transitional phrases to guide the reader.")
+        system_instructions.append("Create a sense of progression and purpose throughout the text.")
+    
+    if "youtube_script" in options:
+        system_instructions.append("Structure the content as an engaging video script with clear sections.")
+        system_instructions.append("Use conversational cues like 'as you can see' or 'let's explore' where appropriate.")
+        system_instructions.append("Format with clear intro, body sections, and conclusion with call to action.")
+        system_instructions.append("Include natural transitions between topics.")
+    
+    if "educational" in options:
+        system_instructions.append("Present information in a structured, easy-to-follow format that facilitates learning.")
+        system_instructions.append("Include examples and analogies to illustrate complex points.")
+        system_instructions.append("Define key terms and concepts clearly.")
+        system_instructions.append("Use a progressive structure that builds understanding from basic to more complex ideas.")
+    
+    if "balanced" in options:
+        system_instructions.append("Use a mature but approachable tone that connects with the reader.")
+        system_instructions.append("Balance friendliness with substance - be conversational but not casual.")
+        system_instructions.append("Write as if speaking to an intelligent peer in a thoughtful discussion.")
+        system_instructions.append("Use natural language without being overly informal or using slang.")
+    
+    if "shorter" in options:
+        system_instructions.append("Reduce the word count by approximately 25% while preserving all key information.")
+        system_instructions.append("Focus on concise phrasing and removing redundancies.")
+        system_instructions.append("Prioritize the most important points and concepts from the original.")
+    
+    if "longer" in options:
+        system_instructions.append("Expand the content by approximately 25% with additional context, examples, and detail.")
+        system_instructions.append("Elaborate on key concepts to provide deeper understanding.")
+        system_instructions.append("Add relevant background information or explanations where helpful.")
+        system_instructions.append("Include additional context or implications of the content.")
+    
+    # Create a cohesive system prompt
+    system_prompt = "\n".join(system_instructions)
+    
+    try:
+        response = openai.ChatCompletion.create(
+            model=AI_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Please rewrite this transcript according to the style instructions:\n\n{content}"}
+            ],
+            temperature=0.4  # Moderate temperature for creativity while maintaining consistency
+        )
+        
+        rewritten_text = response.choices[0].message["content"]
+        return rewritten_text
+    except Exception as e:
+        error_message = f"❌ REWRITE ERROR: {str(e)}"
+        print(error_message)
+        st.error(error_message)
+        return f"Error rewriting transcript: {str(e)}"

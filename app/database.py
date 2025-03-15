@@ -156,6 +156,96 @@ def delete_post_ideas(transcript_id):
         if conn:
             conn.close()
 
+def save_rewrite(transcript_id, rewrite_content, rewrite_options):
+    """Save a rewritten transcript version to the database"""
+    conn = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        
+        # Create rewrites table if it doesn't exist
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS rewrites (
+            id INTEGER PRIMARY KEY,
+            transcript_id INTEGER,
+            content TEXT,
+            options TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (transcript_id) REFERENCES transcripts(id)
+        )
+        ''')
+        
+        # Check if rewrite already exists for this transcript
+        cursor.execute("SELECT id FROM rewrites WHERE transcript_id = ?", (transcript_id,))
+        existing_id = cursor.fetchone()
+        
+        options_str = ",".join(rewrite_options)
+        
+        if existing_id:
+            # Update existing rewrite
+            cursor.execute("UPDATE rewrites SET content = ?, options = ? WHERE transcript_id = ?", 
+                           (rewrite_content, options_str, transcript_id))
+            rewrite_id = existing_id[0]
+        else:
+            # Insert new rewrite
+            cursor.execute("INSERT INTO rewrites (transcript_id, content, options) VALUES (?, ?, ?)", 
+                           (transcript_id, rewrite_content, options_str))
+            rewrite_id = cursor.lastrowid
+        
+        conn.commit()
+        return rewrite_id
+    except Exception as e:
+        print(f"Error saving rewrite: {e}")
+        return None
+    finally:
+        if conn:
+            conn.close()
+
+def get_rewrite(transcript_id):
+    """Retrieve a rewritten transcript"""
+    conn = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT id, content, options FROM rewrites WHERE transcript_id = ?", (transcript_id,))
+        result = cursor.fetchone()
+        
+        if result:
+            options_str = result[2] if result[2] else ""
+            options = options_str.split(",") if options_str else []
+            
+            return {
+                "id": result[0], 
+                "content": result[1],
+                "options": options
+            }
+        else:
+            return None
+    except Exception as e:
+        print(f"Error retrieving rewrite: {e}")
+        return None
+    finally:
+        if conn:
+            conn.close()
+
+def delete_rewrite(transcript_id):
+    """Delete a rewritten transcript"""
+    conn = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("DELETE FROM rewrites WHERE transcript_id = ?", (transcript_id,))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Error deleting rewrite: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
 def get_connection():
     """Get a SQLite connection"""
     return sqlite3.connect(DB_PATH)

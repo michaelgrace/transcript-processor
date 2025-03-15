@@ -1,7 +1,11 @@
 import streamlit as st
 import os
-from processor import detect_and_process, generate_post_ideas
-from database import save_transcript, get_transcript, get_all_transcripts, delete_transcript, save_post_ideas, get_post_ideas, delete_post_ideas
+from processor import detect_and_process, generate_post_ideas, rewrite_transcript
+from database import (
+    save_transcript, get_transcript, get_all_transcripts, delete_transcript, 
+    save_post_ideas, get_post_ideas, delete_post_ideas,
+    save_rewrite, get_rewrite, delete_rewrite
+)
 import markdown
 import re
 import time
@@ -14,8 +18,8 @@ st.markdown("""
 <style>
 /* Reduce top margin for page title */
 .appview-container .main .block-container {
-    padding-top: 0.5rem !important;
-    padding-bottom: 0.5rem !important;
+    padding-top: .5rem !important;
+    padding-bottom: .5rem !important;
 }
 
 /* Hide streamlit branding with !important */
@@ -42,6 +46,18 @@ header {visibility: hidden !important;}
     display: inline-block !important;
     width: auto !important;
     margin-right: 1em;
+}
+
+/* Fix multiselect width */
+div[data-testid="stMultiSelect"] {
+    min-width: 200px !important;
+    max-width: 400px !important;
+    display: inline-block !important;
+}
+
+/* Fix button columns and alignment */
+.stButton {
+    text-align: left !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -142,12 +158,6 @@ if uploaded_file is not None:
 st.divider()
 st.subheader("Previously Processed Transcripts")
 
-# Handle document deletion
-if 'delete_transcript' in st.session_state and st.session_state.delete_transcript:
-    delete_transcript(st.session_state.delete_transcript)
-    st.session_state.delete_transcript = None
-    st.rerun()
-
 # Initialize session state
 if 'show_ideas_tab' not in st.session_state:
     st.session_state.show_ideas_tab = {}
@@ -158,6 +168,28 @@ if 'generating_ideas' not in st.session_state:
 if 'post_ideas' not in st.session_state:
     st.session_state.post_ideas = {}
 
+# New session state variables for rewrite feature
+if 'show_rewrite_tab' not in st.session_state:
+    st.session_state.show_rewrite_tab = {}
+    
+if 'generating_rewrite' not in st.session_state:
+    st.session_state.generating_rewrite = {}
+
+if 'rewrite_content' not in st.session_state:
+    st.session_state.rewrite_content = {}
+
+if 'rewrite_options' not in st.session_state:
+    st.session_state.rewrite_options = {}
+
+# Handle document deletion
+if 'delete_transcript' in st.session_state and st.session_state.delete_transcript:
+    delete_transcript(st.session_state.delete_transcript)
+    # Also delete associated rewrites and ideas
+    delete_rewrite(st.session_state.delete_transcript)
+    delete_post_ideas(st.session_state.delete_transcript)
+    st.session_state.delete_transcript = None
+    st.rerun()
+
 # Update the section that initializes the transcript state
 
 transcripts = get_all_transcripts()
@@ -165,6 +197,7 @@ if transcripts:
     for i, transcript in enumerate(transcripts):
         delete_key = f"delete_{transcript.id}"
         ideas_key = f"ideas_{transcript.id}"
+        rewrite_key = f"rewrite_{transcript.id}"
         expander_label = f"**{transcript.filename}** (ID: {transcript.id})"
         
         with st.expander(expander_label):
@@ -181,15 +214,39 @@ if transcripts:
                 if existing_ideas:
                     st.session_state.post_ideas[transcript.id] = existing_ideas["content"]
             
+            # Initialize rewrite state for this transcript if needed
+            if transcript.id not in st.session_state.show_rewrite_tab:
+                # Check if rewrites exist for this transcript in the database
+                existing_rewrite = get_rewrite(transcript.id)
+                
+                # If rewrite exists in DB, show the tab automatically
+                st.session_state.show_rewrite_tab[transcript.id] = existing_rewrite is not None
+                st.session_state.generating_rewrite[transcript.id] = False
+                
+                # Store the rewrite content in session state if available
+                if existing_rewrite:
+                    st.session_state.rewrite_content[transcript.id] = existing_rewrite["content"]
+                    st.session_state.rewrite_options[transcript.id] = existing_rewrite["options"]
+                else:
+                    st.session_state.rewrite_options[transcript.id] = []
+            
             # Get current state
             show_ideas = st.session_state.show_ideas_tab[transcript.id]
+            show_rewrite = st.session_state.show_rewrite_tab[transcript.id]
             
-            # Rest of your code...
-            
-            # Simplify this tab creation code
-            if show_ideas:
-                # Use standard order always
-                processed_tab, original_tab, ideas_tab = st.tabs(["Processed", "Original", "Post Ideas"])
+            # Create tabs based on what should be shown
+            if show_ideas and show_rewrite:
+                processed_tab, original_tab, ideas_tab, rewrite_tab = st.tabs([
+                    "Processed", "Original", "Post Ideas", "Rewrite"
+                ])
+            elif show_ideas:
+                processed_tab, original_tab, ideas_tab = st.tabs([
+                    "Processed", "Original", "Post Ideas"
+                ])
+            elif show_rewrite:
+                processed_tab, original_tab, rewrite_tab = st.tabs([
+                    "Processed", "Original", "Rewrite"
+                ])
             else:
                 processed_tab, original_tab = st.tabs(["Processed", "Original"])
             
@@ -225,6 +282,93 @@ if transcripts:
                     st.session_state.show_ideas_tab[transcript.id] = True
                     st.session_state.generating_ideas[transcript.id] = True
                     st.rerun()
+                
+                # Add Rewrite button and options
+                with st.container():
+                    # Get or initialize rewrite options for this transcript
+                    if transcript.id not in st.session_state.rewrite_options:
+                        st.session_state.rewrite_options[transcript.id] = []
+                    
+                    # Modify the part where you're handling the multiselect options
+                    # Get the existing database options and ensure they match the format in the multiselect
+                    if transcript.id in st.session_state.rewrite_options and st.session_state.rewrite_options[transcript.id]:
+                        # Normalize the saved options to match exactly what's in the multiselect dropdown
+                        normalized_options = []
+                        for option in st.session_state.rewrite_options[transcript.id]:
+                            if isinstance(option, str):
+                                # Convert options like "youtube_script" to "YouTube Script"
+                                if option.lower() == "clear_simple":
+                                    normalized_options.append("Clear & Simple")
+                                elif option.lower() == "professional":
+                                    normalized_options.append("Professional")
+                                elif option.lower() == "storytelling":
+                                    normalized_options.append("Storytelling")
+                                elif option.lower() == "youtube_script":
+                                    normalized_options.append("YouTube Script")
+                                elif option.lower() == "educational":
+                                    normalized_options.append("Educational")
+                                elif option.lower() == "balanced":
+                                    normalized_options.append("Balanced")
+                                elif option.lower() == "shorter":
+                                    normalized_options.append("Shorter")
+                                elif option.lower() == "longer":
+                                    normalized_options.append("Longer")
+                                # Add direct matches
+                                elif option in ["Clear & Simple", "Professional", "Storytelling", "YouTube Script", "Educational", "Balanced", "Shorter", "Longer"]:
+                                    normalized_options.append(option)
+
+                        # Update the session state with normalized options
+                        st.session_state.rewrite_options[transcript.id] = normalized_options
+
+                    # Now use the normalized options in the multiselect
+                    available_options = [
+                        "Clear & Simple", # Replaces Authoritative - confident but 8th grade level
+                        "Professional", # New - business appropriate, measured tone
+                        "Storytelling", # New - narrative structure with engaging flow
+                        "YouTube Script",
+                        "Educational", # New - explains concepts clearly with examples
+                        "Balanced", # New - replaces Conversational - mature but approachable
+                        "Shorter",
+                        "Longer"
+                    ]
+
+                    # Filter default values to ensure they exist in options
+                    default_options = []
+                    for opt in st.session_state.rewrite_options.get(transcript.id, []):
+                        if opt in available_options:
+                            default_options.append(opt)
+
+                    # Use the filtered defaults
+                    options = st.multiselect(
+                        "Rewrite Options",
+                        available_options,
+                        default=default_options,
+                        key=f"options_{transcript.id}"
+                    )
+                    
+                    # Check for contradictory options
+                    if "Shorter" in options and "Longer" in options:
+                        st.error("Cannot select both 'Shorter' and 'Longer' options. Please choose only one.")
+                        if "Shorter" in options and "Shorter" not in st.session_state.rewrite_options.get(transcript.id, []):
+                            options.remove("Longer")
+                        elif "Longer" in options and "Longer" not in st.session_state.rewrite_options.get(transcript.id, []):
+                            options.remove("Shorter")
+                    
+                    # Update options in session state
+                    st.session_state.rewrite_options[transcript.id] = options
+                    
+                    # Define the rewrite button here - THIS WAS MISSING
+                    rewrite_button = st.button("Rewrite", key=rewrite_key, 
+                                              disabled=len(options) == 0)
+                    
+                    # Handle rewrite button click
+                    if rewrite_button:
+                        if len(options) > 0:
+                            st.session_state.show_rewrite_tab[transcript.id] = True
+                            st.session_state.generating_rewrite[transcript.id] = True
+                            st.rerun()
+                        else:
+                            st.error("Please select at least one rewrite option.")
             
             # Handle Ideas tab if activated
             if show_ideas:
@@ -250,8 +394,8 @@ if transcripts:
                     if transcript.id in st.session_state.post_ideas:
                         st.markdown(st.session_state.post_ideas[transcript.id])
                         
-                        # Add action buttons
-                        col1, col2, col3 = st.columns(3)
+                        # Add action buttons without the container
+                        col1, col2, col3, col4 = st.columns(4)
                         
                         with col1:
                             # Regenerate button
@@ -276,5 +420,87 @@ if transcripts:
                                     st.rerun()
                                 else:
                                     st.error("Failed to delete ideas from database")
+                        
+                        with col4:
+                            # Add download button
+                            st.download_button(
+                                "Download Ideas",
+                                st.session_state.post_ideas[transcript.id],
+                                file_name=f"{transcript.filename.split('.')[0]}_post_ideas.md",
+                                mime="text/markdown",
+                                key=f"download_ideas_{transcript.id}"
+                            )
+            
+            # Handle Rewrite tab if activated
+            if show_rewrite:
+                with rewrite_tab:
+                    # Check if we need to generate a rewrite
+                    if st.session_state.generating_rewrite[transcript.id]:
+                        with st.spinner("Rewriting transcript... This may take a moment."):
+                            # Process options to lowercase for API
+                            api_options = [opt.lower().replace(" ", "_") for opt in st.session_state.rewrite_options[transcript.id]]
+                            
+                            # Either load existing rewrite or generate new one
+                            existing_rewrite = get_rewrite(transcript.id)
+                            
+                            # Check if rewrite exists with same options
+                            if existing_rewrite and set(existing_rewrite["options"]) == set(api_options):
+                                rewrite_content = existing_rewrite["content"]
+                            else:
+                                # Generate new rewrite
+                                rewrite_content = rewrite_transcript(clean_content, api_options)
+                            
+                            st.session_state.rewrite_content[transcript.id] = rewrite_content
+                            st.session_state.generating_rewrite[transcript.id] = False
+                    
+                    # Display rewrite content
+                    if transcript.id in st.session_state.rewrite_content:
+                        content = st.session_state.rewrite_content[transcript.id]
+                        
+                        # Check for error message
+                        if content.startswith("ERROR:"):
+                            st.error(content)
+                        else:
+                            if "#" in content or "**" in content or "*" in content:
+                                st.markdown(content)
+                            else:
+                                st.text_area("Rewritten Content", content, height=300)
+                            
+                            # Add action buttons without the container
+                            col1, col2, col3, col4 = st.columns(4)
+
+                            with col1:
+                                if st.button("Regenerate", key=f"regenerate_rewrite_{transcript.id}"):
+                                    st.session_state.generating_rewrite[transcript.id] = True
+                                    st.rerun()
+                                    
+                            with col2:
+                                if st.button("Save Rewrite", key=f"save_rewrite_{transcript.id}"):
+                                    selected_options = options
+                                    save_rewrite(transcript.id, content, selected_options)
+                                    st.success("Rewrite saved successfully!")
+                                    
+                            with col3:
+                                if st.button("Delete Rewrite", key=f"delete_rewrite_{transcript.id}"):
+                                    success = delete_rewrite(transcript.id)
+                                    if success:
+                                        st.success("Rewrite deleted successfully")
+                                        st.session_state.rewrite_content.pop(transcript.id, None)
+                                        st.session_state.show_rewrite_tab[transcript.id] = False
+                                        st.session_state.rewrite_options[transcript.id] = []
+                                        st.rerun()
+                                    else:
+                                        st.error("Failed to delete rewrite from database")
+                                
+                            with col4:
+                                st.download_button(
+                                    "Download Rewrite",
+                                    content,
+                                    file_name=f"{transcript.filename.split('.')[0]}_rewritten.md",
+                                    mime="text/markdown",
+                                    key=f"download_rewrite_{transcript.id}"
+                                )
 else:
     st.info("No transcripts have been processed yet.")
+
+
