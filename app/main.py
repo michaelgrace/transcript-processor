@@ -137,9 +137,6 @@ header {visibility: hidden !important;}
 st.title("Transcript Processor")
 st.write("Upload an SRT file or text transcript to convert it into a readable format.")
 
-# Add before the "formatting options"
-st.info(f"Using AI model: {os.getenv('AI_MODEL', 'Not specified')} | API Key configured: {'Yes' if os.getenv('API_KEY') else 'No'}")
-
 # Formatting options section
 with st.expander("Formatting Options", expanded=False):
     st.write("Select the formatting elements to apply:")
@@ -175,6 +172,85 @@ with st.expander("Formatting Options", expanded=False):
         horizontal=True,
         index=0
     )
+
+if st.session_state.user_role == "admin":
+    with st.expander("📊 Analytics Dashboard", expanded=False):
+
+        # Add before the "analytic charts"
+        st.info(f"Using AI model: {os.getenv('AI_MODEL', 'Not specified')} | API Key configured: {'Yes' if os.getenv('API_KEY') else 'No'}")
+
+        analytics = get_analytics_summary()
+        
+        # Create a 2-column layout for charts
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("<h3>Popular Rewrite Options</h3>", unsafe_allow_html=True)
+            if "popular_options" in analytics and analytics["popular_options"]:
+                df_options = pd.DataFrame(analytics["popular_options"], columns=["Options", "Count"])
+                df_options["Options"] = df_options["Options"].map(lambda x: x.replace("_", " ").title())
+                fig = px.pie(df_options, values="Count", names="Options")
+                fig.update_layout(
+                    margin=dict(l=10, r=10, t=10, b=10),
+                    height=200,
+                    legend=dict(font=dict(size=8)),
+                    font=dict(size=9),
+                )
+                st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+            else:
+                st.info("No rewrite options data available yet")
+            
+            st.markdown("<h3>Format Styles</h3>", unsafe_allow_html=True)
+            if "popular_formats" in analytics and analytics["popular_formats"]:
+                df_formats = pd.DataFrame(analytics["popular_formats"], columns=["Format", "Count"])
+                fig = px.bar(df_formats, x="Format", y="Count")
+                fig.update_layout(
+                    margin=dict(l=10, r=10, t=10, b=10),
+                    height=200,
+                    font=dict(size=9),
+                    xaxis_title="",
+                    yaxis_title=""
+                )
+                st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+            else:
+                st.info("No format style data available yet")
+        
+        with col2:
+            st.markdown("<h3>Common Topics</h3>", unsafe_allow_html=True)
+            if "common_topics" in analytics and analytics["common_topics"]:
+                df_topics = pd.DataFrame(analytics["common_topics"], columns=["Topic", "Count"])
+                fig = px.bar(df_topics, x="Topic", y="Count")
+                fig.update_layout(
+                    margin=dict(l=10, r=10, t=10, b=10),
+                    height=200,
+                    font=dict(size=9),
+                    xaxis_title="",
+                    yaxis_title=""
+                )
+                st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+            else:
+                st.info("No topic data available yet")
+            
+            st.markdown("<h3>Sentiment Distribution</h3>", unsafe_allow_html=True)
+            if "sentiment_distribution" in analytics and analytics["sentiment_distribution"]:
+                df_sentiment = pd.DataFrame(analytics["sentiment_distribution"], 
+                                         columns=["Sentiment", "Count"])
+                colors = {
+                    'positive': 'green',
+                    'negative': 'red',
+                    'neutral': 'blue'
+                }
+                fig = px.pie(df_sentiment, values="Count", names="Sentiment", 
+                           color="Sentiment", color_discrete_map=colors)
+                fig.update_layout(
+                    margin=dict(l=10, r=10, t=10, b=10),
+                    height=200,
+                    legend=dict(font=dict(size=8)),
+                    font=dict(size=9),
+                )
+                st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+            else:
+                st.info("No sentiment data available yet")
 
 # Update the file uploader to accept PDF files
 uploaded_file = st.file_uploader("Choose a file", type=["srt", "txt", "pdf"])
@@ -298,91 +374,6 @@ if uploaded_file is not None:
         st.code(traceback.format_exc())
 
 # Add this just before the "History section" (where you have st.divider())
-
-# Analytics sidebar
-with st.sidebar:
-    if st.session_state.user_role == "admin":  # Only show for admin users
-        with st.expander("📊 Analytics Dashboard"):
-            analytics = get_analytics_summary()
-                
-            st.markdown("<h3>Popular Rewrite Options</h3>", unsafe_allow_html=True)
-            if "popular_options" in analytics and analytics["popular_options"]:
-                df_options = pd.DataFrame(analytics["popular_options"], columns=["Options", "Count"])
-                
-                # Clean up option names for display
-                df_options["Options"] = df_options["Options"].map(lambda x: x.replace("_", " ").title())
-                
-                # Create the chart
-                fig = px.pie(df_options, values="Count", names="Options")
-                fig.update_layout(
-                    margin=dict(l=10, r=10, t=10, b=10),
-                    height=200,
-                    legend=dict(font=dict(size=8)),
-                    font=dict(size=9),
-                )
-                st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-            else:
-                st.info("No rewrite options data available yet")
-            
-            st.markdown("<h3>Format Styles</h3>", unsafe_allow_html=True)
-            if "popular_formats" in analytics and analytics["popular_formats"]:
-                df_formats = pd.DataFrame(analytics["popular_formats"], columns=["Format", "Count"])
-                
-                # Create the chart
-                fig = px.bar(df_formats, x="Format", y="Count")
-                fig.update_layout(
-                    margin=dict(l=10, r=10, t=10, b=10),
-                    height=200,
-                    font=dict(size=9),
-                    xaxis_title=None,
-                    yaxis_title=None
-                )
-                st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-            else:
-                st.info("No format style data available yet")
-                
-            # Add Common Topics chart
-            st.markdown("<h3>Common Topics</h3>", unsafe_allow_html=True)
-            if "common_topics" in analytics and analytics["common_topics"]:
-                df_topics = pd.DataFrame(analytics["common_topics"], columns=["Topic", "Count"])
-                
-                # Create the chart
-                fig = px.bar(df_topics, x="Topic", y="Count")
-                fig.update_layout(
-                    margin=dict(l=10, r=10, t=10, b=10),
-                    height=200,
-                    font=dict(size=9),
-                    xaxis_title=None,
-                    yaxis_title=None
-                )
-                st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-            else:
-                st.info("No topic data available yet")
-                
-            # Add Sentiment Distribution chart
-            st.markdown("<h3>Sentiment Distribution</h3>", unsafe_allow_html=True)
-            if "sentiment_distribution" in analytics and analytics["sentiment_distribution"]:
-                df_sentiment = pd.DataFrame(analytics["sentiment_distribution"], columns=["Sentiment", "Count"])
-                
-                # Create a pie chart for sentiment
-                colors = {
-                    'positive': 'green',
-                    'negative': 'red',
-                    'neutral': 'blue'
-                }
-                
-                fig = px.pie(df_sentiment, values="Count", names="Sentiment", 
-                             color="Sentiment", 
-                             color_discrete_map=colors)
-                fig.update_layout(
-                    margin=dict(l=10, r=10, t=10, b=10),
-                    height=200,
-                    legend=dict(font=dict(size=8)),
-                    font=dict(size=9),
-                )
-                st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-            else:
-                st.info("No sentiment data available yet")
 
 # History section
 st.divider()
