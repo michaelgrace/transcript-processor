@@ -91,12 +91,58 @@ def format_text(text, add_paragraphs=True, add_headings=True, fix_grammar=True, 
         print(f"Error formatting text: {e}")
         return text  # Return original text if formatting fails
 
-def detect_and_process(file_content, filename, add_paragraphs=True, add_headings=True, fix_grammar=True, highlight_key_points=True, format_style="Article"):
-    """Detect file type and process accordingly with formatting options"""
-    if filename.lower().endswith('.srt'):
-        return process_srt(file_content, add_paragraphs, add_headings, fix_grammar, highlight_key_points, format_style)
+def detect_and_process(content, filename, add_paragraphs=True, add_headings=True, 
+                      fix_grammar=True, highlight_key_points=True, format_style="Article", 
+                      is_binary=False):
+    """
+    Detect file type and process accordingly
+    If is_binary is True, content is treated as binary data (for PDF files)
+    """
+    import os
+    
+    file_extension = os.path.splitext(filename)[1].lower()
+    processed_content = ""
+    
+    # Handle PDF files
+    if file_extension == '.pdf' and is_binary:
+        # Extract text from PDF
+        content = extract_text_from_pdf(content)
+        # Process the extracted text
+        processed_content = format_text(
+            content, 
+            add_paragraphs=add_paragraphs,
+            add_headings=add_headings,
+            fix_grammar=fix_grammar,
+            highlight_key_points=highlight_key_points,
+            format_style=format_style
+        )
+    # Process SRT files
+    elif file_extension == '.srt':
+        # Process the SRT file directly - process_srt already calls format_text internally
+        processed_content = process_srt(
+            content,
+            add_paragraphs=add_paragraphs,
+            add_headings=add_headings,
+            fix_grammar=fix_grammar,
+            highlight_key_points=highlight_key_points,
+            format_style=format_style
+        )
+    # Process other text files
     else:
-        return process_text(file_content, add_paragraphs, add_headings, fix_grammar, highlight_key_points, format_style)
+        # Process plain text
+        processed_content = format_text(
+            content, 
+            add_paragraphs=add_paragraphs,
+            add_headings=add_headings,
+            fix_grammar=fix_grammar,
+            highlight_key_points=highlight_key_points,
+            format_style=format_style
+        )
+    
+    # Adjust heading sizes as the final step
+    processed_content = adjust_markdown_headings(processed_content)
+    
+    return processed_content
 
 def generate_post_ideas(transcript_content):
     """Generate content ideas for social media posts based on a transcript"""
@@ -182,7 +228,11 @@ def rewrite_transcript(content, options):
         "realm",
         "delve", 
         "dive in",
-        "what if I told you",
+        "Welcome to our exploration",
+        "Let's explore",
+        "In conclusion",
+        "Have you ever wondered",
+        "What if I told you",
         "profound"
     ]
     
@@ -266,3 +316,105 @@ def rewrite_transcript(content, options):
         print(error_message)
         st.error(error_message)
         return f"Error rewriting transcript: {str(e)}"
+
+def analyze_transcript_metadata(content):
+    """
+    Generate metadata about transcript content including topics, keywords, and sentiment
+    """
+    try:
+        system_prompt = """You are an AI specializing in content analysis. 
+        Analyze the provided transcript and extract the following metadata:
+        
+        1. Topics: Main subjects discussed in the content (max 5)
+        2. Keywords: Important terms or phrases that represent key concepts (max 10)
+        3. Sentiment: Overall emotional tone (positive, negative, neutral) with confidence score
+        4. Tags: Categories or labels that would help classify this content (max 8)
+        
+        Format your response as a JSON object with these keys: topics, keywords, sentiment, tags.
+        For sentiment, include both the classification and a confidence score between 0 and 1.
+        """
+        
+        # Call OpenAI API
+        response = openai.ChatCompletion.create(
+            model=AI_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Analyze this transcript:\n\n{content[:8000]}"}
+            ],
+            temperature=0.1,  # Low temperature for consistent analysis
+            response_format={"type": "json_object"}  # Request JSON response
+        )
+        
+        # Extract and parse JSON response
+        metadata_json = response.choices[0].message["content"]
+        import json
+        metadata = json.loads(metadata_json)
+        
+        return metadata
+    except Exception as e:
+        print(f"Error analyzing transcript metadata: {e}")
+        return {
+            "topics": [],
+            "keywords": [],
+            "sentiment": {"classification": "neutral", "confidence": 0.5},
+            "tags": []
+        }
+
+# Add this function to your processor.py file to standardize heading sizes
+def standardize_headings(content):
+    """
+    Standardize all headings to use ### (h3) instead of # (h1)
+    """
+    # Replace # heading with ### heading (if not already ### or ##)
+    content = re.sub(r'(?m)^# (.+)$', r'## \1', content)
+    # Replace ## heading with ### heading (if not already ###)
+    content = re.sub(r'(?m)^## (.+)$', r'### \1', content)
+    return content
+
+def extract_text_from_pdf(pdf_content):
+    """
+    Extract text from a PDF file
+    """
+    try:
+        from io import BytesIO
+        import PyPDF2
+        
+        # Create a file-like object from the PDF content
+        pdf_file = BytesIO(pdf_content)
+        
+        # Create a PDF reader object
+        pdf_reader = PyPDF2.PdfReader(pdf_file)
+        
+        # Extract text from all pages
+        text = ""
+        for page in pdf_reader.pages:
+            page_text = page.extract_text()
+            if page_text:  # Check if text extraction was successful
+                text += page_text + "\n\n"
+        
+        return text.strip()
+    except Exception as e:
+        print(f"Error extracting text from PDF: {e}")
+        return f"Error extracting text from PDF: {str(e)}"
+
+def adjust_markdown_headings(markdown_text):
+    """
+    Adjust markdown headings:
+    - `#` becomes `###`
+    - `##` becomes `###`
+    - Default heading level is `###`
+    """
+    lines = markdown_text.splitlines()
+    adjusted_lines = []
+    
+    for line in lines:
+        if line.startswith('# '):
+            # Convert # heading to ### heading
+            adjusted_lines.append(f"### {line[2:]}")
+        elif line.startswith('## '):
+            # Convert ## heading to ### heading
+            adjusted_lines.append(f"### {line[3:]}")
+        else:
+            adjusted_lines.append(line)
+            
+    return '\n'.join(adjusted_lines)

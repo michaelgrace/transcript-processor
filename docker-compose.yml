@@ -1,4 +1,4 @@
-version: '3'
+version: '3.8'
 
 services:
   app:
@@ -7,11 +7,32 @@ services:
       - "8501:8501"
     volumes:
       - .:/app
-      - ./data:/app/data
-    env_file:
-      - .env
-    restart: unless-stopped
+    depends_on:
+      - db
     environment:
-      - API_KEY=${API_KEY}
-      - AI_MODEL=${AI_MODEL}
-      - DB_PATH=${DB_PATH}
+      - DB_CONNECTION_STRING=postgresql://postgres:postgres@db:5432/transcripts
+      - PYTHONUNBUFFERED=1
+    networks:
+      - app-network
+    command: streamlit run app/main.py --server.port=8501 --server.address=0.0.0.0
+
+  db:
+    image: ankane/pgvector:latest
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=transcripts
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
