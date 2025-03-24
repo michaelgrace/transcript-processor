@@ -360,16 +360,7 @@ def analyze_transcript_metadata(content):
             "tags": []
         }
 
-# Add this function to your processor.py file to standardize heading sizes
-def standardize_headings(content):
-    """
-    Standardize all headings to use ### (h3) instead of # (h1)
-    """
-    # Replace # heading with ### heading (if not already ### or ##)
-    content = re.sub(r'(?m)^# (.+)$', r'## \1', content)
-    # Replace ## heading with ### heading (if not already ###)
-    content = re.sub(r'(?m)^## (.+)$', r'### \1', content)
-    return content
+
 
 def extract_text_from_pdf(pdf_content):
     """

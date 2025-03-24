@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS post_ideas (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+ALTER TABLE post_ideas ADD CONSTRAINT unique_transcript_post_ideas UNIQUE (transcript_id);
+
 CREATE TABLE IF NOT EXISTS rewrites (
     id SERIAL PRIMARY KEY,
     transcript_id INTEGER REFERENCES transcripts(id) ON DELETE CASCADE,

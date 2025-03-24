@@ -1,0 +1,190 @@
+
+app\main.py:8:st.set_page_config(
+app\main.py:30:# Add this before you use st.session_state.user_role anywhere in your code
+app\main.py:31:# Preferably close to the top, after st.set_page_config
+app\main.py:32:if 'user_role' not in st.session_state:
+app\main.py:33:    st.session_state.user_role = "admin"  # Default to admin for now
+app\main.py:37:st.markdown("""
+app\main.py:137:st.title("Transcript Processor")
+app\main.py:138:st.write("Upload an SRT file or text transcript to convert it into a readable format.")
+app\main.py:141:with st.expander("Formatting Options", expanded=False):
+app\main.py:142:    st.write("Select the formatting elements to apply:")
+app\main.py:143:    col1, col2 = st.columns(2)
+app\main.py:146:        add_paragraphs = st.checkbox(
+app\main.py:151:        add_headings = st.checkbox(
+app\main.py:158:        fix_grammar = st.checkbox(
+app\main.py:163:        highlight_key_points = st.checkbox(
+app\main.py:169:    format_style = st.radio(
+app\main.py:176:if st.session_state.user_role == "admin":
+app\main.py:177:    with st.expander("📊 Analytics Dashboard", expanded=False):
+app\main.py:180:        st.info(f"Using AI model: {os.getenv('AI_MODEL', 'Not specified')} | API Key configured: {'Yes' if os.getenv('API_KEY') else 'No'}")
+app\main.py:185:        col1, col2 = st.columns(2)
+app\main.py:188:            st.markdown("<h3>Popular Rewrite Options</h3>", unsafe_allow_html=True)
+app\main.py:199:                st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+app\main.py:201:                st.info("No rewrite options data available yet")
+app\main.py:203:            st.markdown("<h3>Format Styles</h3>", unsafe_allow_html=True)
+app\main.py:214:                st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+app\main.py:216:                st.info("No format style data available yet")
+app\main.py:219:            st.markdown("<h3>Common Topics</h3>", unsafe_allow_html=True)
+app\main.py:230:                st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+app\main.py:232:                st.info("No topic data available yet")
+app\main.py:234:            st.markdown("<h3>Sentiment Distribution</h3>", unsafe_allow_html=True)
+app\main.py:251:                st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+app\main.py:253:                st.info("No sentiment data available yet")
+app\main.py:256:uploaded_file = st.file_uploader("Choose a file", type=["srt", "txt", "pdf"])
+app\main.py:267:            st.info(f"Processing PDF file: {uploaded_file.name}")
+app\main.py:289:            st.info(f"Processing {uploaded_file.name.split('.')[-1].upper()} file: {uploaded_file.name}")
+app\main.py:292:            with st.spinner("Processing transcript... This may take a moment."):
+app\main.py:305:                    st.success("Processing complete!")
+app\main.py:308:                    st.error("Processing failed - no content returned")
+app\main.py:311:        tab2, tab1 = st.tabs(["Processed Content", "Original Content"])
+app\main.py:314:            st.text_area("Original Content", file_content, height=300, key="upload_original_content")
+app\main.py:319:                st.markdown(processed_content)
+app\main.py:322:                st.download_button(
+app\main.py:329:                st.text_area("Processed Content", processed_content, height=300, key="upload_processed_content")
+app\main.py:332:            if st.button("Save to Database"):
+app\main.py:348:                    with st.spinner("Analyzing content metadata..."):
+app\main.py:353:                                st.warning("Metadata analysis saved with errors")
+app\main.py:368:                    st.success(f"Saved transcript with ID: {transcript_id}")
+app\main.py:370:                    st.error("Failed to save transcript to database. Check logs for details.")
+app\main.py:372:        st.error(f"Error processing file: {str(e)}")
+app\main.py:374:        st.code(traceback.format_exc())
+app\main.py:376:# Add this just before the "History section" (where you have st.divider())
+app\main.py:379:st.divider()
+app\main.py:380:st.subheader("Previously Processed Transcripts")
+app\main.py:383:if 'show_ideas_tab' not in st.session_state:
+app\main.py:384:    st.session_state.show_ideas_tab = {}
+app\main.py:386:if 'generating_ideas' not in st.session_state:
+app\main.py:387:    st.session_state.generating_ideas = {}
+app\main.py:389:if 'post_ideas' not in st.session_state:
+app\main.py:390:    st.session_state.post_ideas = {}
+app\main.py:393:if 'show_rewrite_tab' not in st.session_state:
+app\main.py:394:    st.session_state.show_rewrite_tab = {}
+app\main.py:396:if 'generating_rewrite' not in st.session_state:
+app\main.py:397:    st.session_state.generating_rewrite = {}
+app\main.py:399:if 'rewrite_content' not in st.session_state:
+app\main.py:400:    st.session_state.rewrite_content = {}
+app\main.py:402:if 'rewrite_options' not in st.session_state:
+app\main.py:403:    st.session_state.rewrite_options = {}
+app\main.py:406:if 'user_role' not in st.session_state:
+app\main.py:407:    st.session_state.user_role = "admin"  # Default to admin for now, you can implement proper auth later
+app\main.py:410:if 'delete_transcript' in st.session_state and st.session_state.delete_transcript:
+app\main.py:411:    delete_transcript(st.session_state.delete_transcript)
+app\main.py:413:    delete_rewrite(st.session_state.delete_transcript)
+app\main.py:414:    delete_post_ideas(st.session_state.delete_transcript)
+app\main.py:415:    st.session_state.delete_transcript = None
+app\main.py:416:    st.rerun()
+app\main.py:429:        with st.expander(expander_label):
+app\main.py:431:            if transcript['id'] not in st.session_state.show_ideas_tab:
+app\main.py:436:                st.session_state.show_ideas_tab[transcript['id']] = existing_ideas is not None
+app\main.py:437:                st.session_state.generating_ideas[transcript['id']] = False
+app\main.py:441:                    st.session_state.post_ideas[transcript['id']] = existing_ideas["content"]
+app\main.py:444:            if transcript['id'] not in st.session_state.show_rewrite_tab:
+app\main.py:449:                st.session_state.show_rewrite_tab[transcript['id']] = existing_rewrite is not None
+app\main.py:450:                st.session_state.generating_rewrite[transcript['id']] = False
+app\main.py:454:                    st.session_state.rewrite_content[transcript['id']] = existing_rewrite["content"]
+app\main.py:455:                    st.session_state.rewrite_options[transcript['id']] = existing_rewrite["options"]
+app\main.py:457:                    st.session_state.rewrite_options[transcript['id']] = []
+app\main.py:460:            show_ideas = st.session_state.show_ideas_tab[transcript['id']]
+app\main.py:461:            show_rewrite = st.session_state.show_rewrite_tab[transcript['id']]
+app\main.py:471:            if st.session_state.user_role == "admin":  # Only show these tabs for admin users
+app\main.py:474:            all_tabs = st.tabs(tab_names)
+app\main.py:490:            if st.session_state.user_role == "admin":
+app\main.py:495:                st.text_area("Original Content", transcript['original_content'], height=200, key=f"original_content_{transcript['id']}")
+app\main.py:499:                st.markdown(transcript['processed_content'], unsafe_allow_html=True)
+app\main.py:502:                st.download_button(
+app\main.py:511:                if st.button("Delete Transcript", key=delete_key):
+app\main.py:512:                    st.session_state.delete_transcript = transcript['id']
+app\main.py:513:                    st.rerun()
+app\main.py:516:                if st.button("Post Ideas", key=ideas_key):
+app\main.py:518:                    st.session_state.show_ideas_tab[transcript['id']] = True
+app\main.py:519:                    st.session_state.generating_ideas[transcript['id']] = True
+app\main.py:520:                    st.rerun()
+app\main.py:523:                with st.container():
+app\main.py:525:                    if transcript['id'] not in st.session_state.rewrite_options:
+app\main.py:526:                        st.session_state.rewrite_options[transcript['id']] = []
+app\main.py:530:                    if transcript['id'] in st.session_state.rewrite_options and st.session_state.rewrite_options[transcript['id']]:
+app\main.py:533:                        for option in st.session_state.rewrite_options[transcript['id']]:
+app\main.py:558:                        st.session_state.rewrite_options[transcript['id']] = normalized_options
+app\main.py:574:                    for opt in st.session_state.rewrite_options.get(transcript['id'], []):
+app\main.py:579:                    options = st.multiselect(
+app\main.py:587:                    if "Shorter" in options and "Shorter" not in st.session_state.rewrite_options.get(transcript['id'], []):
+app\main.py:589:                    elif "Longer" in options and "Longer" not in st.session_state.rewrite_options.get(transcript['id'], []):
+app\main.py:593:                    st.session_state.rewrite_options[transcript['id']] = options
+app\main.py:596:                    rewrite_button = st.button("Rewrite", key=rewrite_key, 
+app\main.py:602:                            st.session_state.show_rewrite_tab[transcript['id']] = True
+app\main.py:603:                            st.session_state.generating_rewrite[transcript['id']] = True
+app\main.py:604:                            st.rerun()
+app\main.py:606:                            st.error("Please select at least one rewrite option.")
+app\main.py:612:                    if st.session_state.generating_ideas[transcript['id']]:
+app\main.py:613:                        with st.spinner("Generating post ideas..."):
+app\main.py:619:                                st.session_state.post_ideas[transcript['id']] = ideas_content
+app\main.py:623:                                st.session_state.post_ideas[transcript['id']] = ideas_content
+app\main.py:626:                            st.session_state.generating_ideas[transcript['id']] = False
+app\main.py:629:                    if transcript['id'] in st.session_state.post_ideas:
+app\main.py:630:                        st.text_area("Post Ideas", st.session_state.post_ideas[transcript['id']], height=300, key=f"ideas_content_{transcript['id']}")
+app\main.py:633:                        col1, col2, col3, col4 = st.columns(4)
+app\main.py:637:                            if st.button("Regenerate Ideas", key=f"regenerate_{transcript['id']}"):
+app\main.py:638:                                st.session_state.generating_ideas[transcript['id']] = True
+app\main.py:639:                                st.rerun()
+app\main.py:643:                            if st.button("Save Ideas", key=f"save_ideas_{transcript['id']}"):
+app\main.py:644:                                save_post_ideas(transcript['id'], st.session_state.post_ideas[transcript['id']])
+app\main.py:653:                                st.success("Ideas saved successfully!")
+app\main.py:657:                            if st.button("Delete Ideas", key=f"delete_ideas_{transcript['id']}"):
+app\main.py:660:                                    st.success("Ideas deleted successfully")
+app\main.py:661:                                    st.session_state.post_ideas.pop(transcript['id'], None)
+app\main.py:662:                                    st.session_state.show_ideas_tab[transcript['id']] = False
+app\main.py:663:                                    st.rerun()
+app\main.py:665:                                    st.error("Failed to delete ideas from database")
+app\main.py:669:                            st.download_button(
+app\main.py:671:                                st.session_state.post_ideas[transcript['id']],
+app\main.py:681:                    if st.session_state.generating_rewrite[transcript['id']]:
+app\main.py:682:                        with st.spinner("Rewriting transcript... This may take a moment."):
+app\main.py:684:                            api_options = [opt.lower().replace(" ", "_") for opt in st.session_state.rewrite_options[transcript['id']]]
+app\main.py:696:                            st.session_state.rewrite_content[transcript['id']] = rewrite_content
+app\main.py:697:                            st.session_state.generating_rewrite[transcript['id']] = False
+app\main.py:700:                    if transcript['id'] in st.session_state.rewrite_content:
+app\main.py:701:                        content = st.session_state.rewrite_content[transcript['id']]
+app\main.py:705:                            st.error(content)
+app\main.py:708:                                st.markdown(content)
+app\main.py:710:                                st.text_area("Rewritten Content", content, height=300, key=f"rewrite_content_{transcript['id']}")
+app\main.py:713:                            col1, col2, col3, col4 = st.columns(4)
+app\main.py:716:                                if st.button("Regenerate", key=f"regenerate_rewrite_{transcript['id']}"):
+app\main.py:717:                                    st.session_state.generating_rewrite[transcript['id']] = True
+app\main.py:718:                                    st.rerun()
+app\main.py:721:                                if st.button("Save Rewrite", key=f"save_rewrite_{transcript['id']}"):
+app\main.py:732:                                    st.success("Rewrite saved successfully!")
+app\main.py:735:                                if st.button("Delete Rewrite", key=f"delete_rewrite_{transcript['id']}"):
+app\main.py:738:                                        st.success("Rewrite deleted successfully")
+app\main.py:739:                                        st.session_state.rewrite_content.pop(transcript['id'], None)
+app\main.py:740:                                        st.session_state.show_rewrite_tab[transcript['id']] = False
+app\main.py:741:                                        st.session_state.rewrite_options[transcript['id']] = []
+app\main.py:742:                                        st.rerun()
+app\main.py:744:                                        st.error("Failed to delete rewrite from database")
+app\main.py:747:                                st.download_button(
+app\main.py:755:            if st.session_state.user_role == "admin" and "metadata_tab" in locals():
+app\main.py:759:                        col1, col2 = st.columns(2)
+app\main.py:762:                            st.subheader("Topics")
+app\main.py:766:                                    st.write(f"• {topic}")
+app\main.py:768:                                st.write("No topics detected")
+app\main.py:770:                            st.subheader("Keywords")
+app\main.py:773:                                st.write(", ".join(keywords))
+app\main.py:775:                                st.write("No keywords detected")
+app\main.py:778:                            st.subheader("Tags")
+app\main.py:782:                                    st.write(f"• {tag}")
+app\main.py:784:                                st.write("No tags detected")
+app\main.py:786:                            st.subheader("Sentiment")
+app\main.py:793:                                    st.success(f"Positive (Confidence: {confidence:.2f})")
+app\main.py:795:                                    st.error(f"Negative (Confidence: {confidence:.2f})")
+app\main.py:797:                                    st.info(f"Neutral (Confidence: {confidence:.2f})")
+app\main.py:800:                        if st.button("Refresh Metadata Analysis", key=f"refresh_metadata_{transcript['id']}"):
+app\main.py:801:                            with st.spinner("Analyzing content..."):
+app\main.py:805:                                    st.success("Metadata updated successfully!")
+app\main.py:806:                                    st.rerun()
+app\main.py:808:                        st.info("No metadata available for this transcript.")
+app\main.py:809:                        if st.button("Generate Metadata", key=f"generate_metadata_{transcript['id']}"):
+app\main.py:810:                            with st.spinner("Analyzing content..."):
+app\main.py:814:                                    st.success("Metadata generated successfully!")
+app\main.py:815:                                    st.rerun()
+app\main.py:818:    st.info("No transcripts have been processed yet.")
+

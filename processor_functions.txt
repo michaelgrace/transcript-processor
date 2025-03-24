@@ -1,0 +1,12 @@
+
+app\processor.py:14:def process_srt(content, add_paragraphs=True, add_headings=True, fix_grammar=True, highlight_key_points=True, format_style="Article"):
+app\processor.py:32:def process_text(content, add_paragraphs=True, add_headings=True, fix_grammar=True, highlight_key_points=True, format_style="Article"):
+app\processor.py:36:def format_text(text, add_paragraphs=True, add_headings=True, fix_grammar=True, highlight_key_points=True, format_style="Article"):
+app\processor.py:94:def detect_and_process(content, filename, add_paragraphs=True, add_headings=True, 
+app\processor.py:147:def generate_post_ideas(transcript_content):
+app\processor.py:202:def rewrite_transcript(content, options):
+app\processor.py:320:def analyze_transcript_metadata(content):
+app\processor.py:364:def standardize_headings(content):
+app\processor.py:374:def extract_text_from_pdf(pdf_content):
+app\processor.py:400:def adjust_markdown_headings(markdown_text):
+

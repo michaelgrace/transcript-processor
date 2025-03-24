@@ -1,0 +1,39 @@
+
+app\database.py:34:            "INSERT INTO transcripts (filename, original_content, processed_content, format_style, source_type) VALUES (%s, %s, %s, %s, %s) RETURNING id",
+app\database.py:57:        cursor.execute("SELECT id, filename, original_content, processed_content, format_style FROM transcripts WHERE id = %s", (transcript_id,))
+app\database.py:82:        cursor.execute("SELECT id, filename, original_content, processed_content, format_style FROM transcripts ORDER BY created_at DESC")
+app\database.py:101:def delete_transcript(transcript_id):
+app\database.py:102:    """Delete a transcript by ID"""
+app\database.py:107:        cursor.execute("DELETE FROM transcripts WHERE id = %s", (transcript_id,))
+app\database.py:126:            "INSERT INTO post_ideas (transcript_id, content) VALUES (%s, %s) ON CONFLICT (transcript_id) DO UPDATE SET content = %s",
+app\database.py:146:        cursor.execute("SELECT content FROM post_ideas WHERE transcript_id = %s", (transcript_id,))
+app\database.py:159:def delete_post_ideas(transcript_id):
+app\database.py:160:    """Delete post ideas for a transcript"""
+app\database.py:165:        cursor.execute("DELETE FROM post_ideas WHERE transcript_id = %s", (transcript_id,))
+app\database.py:186:        cursor.execute("SELECT id FROM rewrites WHERE transcript_id = %s", (transcript_id,))
+app\database.py:190:            # Update existing rewrite
+app\database.py:192:                "UPDATE rewrites SET content = %s, options = %s WHERE transcript_id = %s",
+app\database.py:196:            # Insert new rewrite
+app\database.py:198:                "INSERT INTO rewrites (transcript_id, content, options) VALUES (%s, %s, %s)",
+app\database.py:221:        cursor.execute("SELECT content, options FROM rewrites WHERE transcript_id = %s", (transcript_id,))
+app\database.py:236:def delete_rewrite(transcript_id):
+app\database.py:237:    """Delete a rewritten transcript"""
+app\database.py:242:        cursor.execute("DELETE FROM rewrites WHERE transcript_id = %s", (transcript_id,))
+app\database.py:269:            INSERT INTO transcript_metadata (transcript_id, topics, keywords, sentiment, tags)
+app\database.py:271:            ON CONFLICT (transcript_id) DO UPDATE
+app\database.py:297:            "SELECT topics, keywords, sentiment, tags FROM transcript_metadata WHERE transcript_id = %s",
+app\database.py:344:            INSERT INTO analytics (transcript_id, action_type, action_details)
+app\database.py:370:                SELECT 
+app\database.py:376:            SELECT 
+app\database.py:388:            SELECT 
+app\database.py:400:            SELECT 
+app\database.py:415:                SELECT jsonb_array_elements_text(topics) as topic
+app\database.py:419:            SELECT 
+app\database.py:432:                SELECT 
+app\database.py:437:            SELECT 
+app\database.py:486:                SELECT column_name 
+app\database.py:503:                transcript_id INTEGER PRIMARY KEY REFERENCES transcripts(id) ON DELETE CASCADE,
+app\database.py:513:                transcript_id INTEGER REFERENCES transcripts(id) ON DELETE CASCADE,
+app\database.py:524:                transcript_id INTEGER REFERENCES transcripts(id) ON DELETE CASCADE,
+app\database.py:534:                transcript_id INTEGER PRIMARY KEY REFERENCES transcripts(id) ON DELETE CASCADE,
+

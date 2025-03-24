@@ -36,101 +36,47 @@ if 'user_role' not in st.session_state:
 # Enhanced CSS with stronger hiding rules for branding and subtle button styling
 st.markdown("""
 <style>
-/* Reduce top margin for page title */
+/* Core layout settings */
 .appview-container .main .block-container {
     padding-top: .5rem !important;
     padding-bottom: .5rem !important;
+    max-width: 100% !important;
 }
 
-/* Hide streamlit branding with !important */
-#MainMenu {visibility: hidden !important;}
-footer {visibility: hidden !important;}
-header {visibility: hidden !important;}
-
-/* Hide decoration elements */
+/* Hide Streamlit branding */
+#MainMenu, footer, header {visibility: hidden !important;}
 .decoration {display: none !important;}
 
-@media print {
-    .streamlit-container { padding: 0 !important; }
-    header, footer, .stButton, .stDownloadButton { display: none !important; }
-    .main { padding: 1rem !important; }
-}
-
-/* Remove width constraints on buttons */
+/* Button styling */
 .stButton > button, .stDownloadButton > button {
     width: auto !important;
 }
 
-/* Remove block display */
 .stButton, .stDownloadButton {
     display: inline-block !important;
     width: auto !important;
     margin-right: 1em;
 }
 
-/* Fix multiselect width */
+/* Component sizing */
 div[data-testid="stMultiSelect"] {
     min-width: 200px !important;
     max-width: 400px !important;
     display: inline-block !important;
 }
 
-/* Fix button columns and alignment */
-.stButton {
-    text-align: left !important;
-}
-
-/* Make sidebar narrower */
-[data-testid="stSidebar"] {
-    width: 250px !important;
-    min-width: 250px !important;
-}
-
-/* Adjust text in sidebar to prevent wrapping when possible */
-[data-testid="stSidebar"] .stMarkdown {
-    font-size: 0.9em;
-}
-
-/* Adjust expander width in sidebar */
-[data-testid="stSidebar"] [data-testid="stExpander"] {
-    width: 100% !important;
-}
-
-/* Make plots in sidebar fit */
-[data-testid="stSidebar"] .stPlotlyChart {
-    width: 100% !important;
-}
-
-/* Reduce font size in analytics dashboard */
-[data-testid="stSidebar"] h3 {
-    font-size: 1.1rem !important;
-    margin-top: 0.8rem !important;
-    margin-bottom: 0.5rem !important;
-}
-
-/* Reduce top margin for page title */
-.appview-container .main .block-container {
-    padding-top: .5rem !important;
-    padding-bottom: .5rem !important;
-    max-width: 100% !important;  /* Make the main container full width */
-}
-
-/* Make the content area use more width */
-.css-1d391kg, .css-1lcbmhc, .css-12oz5g7 {
-    max-width: 100% !important;
-}
-
-/* Make all Streamlit containers full width */
+/* Layout containers */
 .block-container {
     max-width: 100% !important;
-    padding-left: 1rem !important;
-    padding-right: 1rem !important;
+    padding: 0.5rem 1rem !important;
 }
 
-/* Hide streamlit branding with !important */
-#MainMenu {visibility: hidden !important;}
-footer {visibility: hidden !important;}
-header {visibility: hidden !important;}
+/* Print settings */
+@media print {
+    .streamlit-container { padding: 0 !important; }
+    header, footer, .stButton, .stDownloadButton { display: none !important; }
+    .main { padding: 1rem !important; }
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -437,8 +383,12 @@ if transcripts:
                 st.session_state.generating_ideas[transcript['id']] = False
                 
                 # Store the ideas content in session state if available
+                # Since existing_ideas is a tuple from database cursor, access by index
                 if existing_ideas:
-                    st.session_state.post_ideas[transcript['id']] = existing_ideas["content"]
+                    #st.session_state.post_ideas[transcript['id']] = existing_ideas[0]
+                    st.session_state.post_ideas[transcript['id']] = existing_ideas
+                else:
+                    st.session_state.post_ideas[transcript['id']] = ""
             
             # Initialize rewrite state for this transcript if needed
             if transcript['id'] not in st.session_state.show_rewrite_tab:
@@ -615,8 +565,8 @@ if transcripts:
                             existing_ideas = get_post_ideas(transcript['id'])
                             
                             if existing_ideas:
-                                ideas_content = existing_ideas["content"]
-                                st.session_state.post_ideas[transcript['id']] = ideas_content
+                                # existing_ideas is now directly the content string
+                                st.session_state.post_ideas[transcript['id']] = existing_ideas
                             else:
                                 # Generate new ideas
                                 ideas_content = generate_post_ideas(transcript['processed_content'])
@@ -627,32 +577,42 @@ if transcripts:
                     
                     # Display ideas content
                     if transcript['id'] in st.session_state.post_ideas:
-                        st.text_area("Post Ideas", st.session_state.post_ideas[transcript['id']], height=300, key=f"ideas_content_{transcript['id']}")
+                        content = st.session_state.post_ideas[transcript['id']]
                         
-                        # Add action buttons without the container
-                        col1, col2, col3, col4 = st.columns(4)
+                        # Display content in a text area to allow editing
+                        edited_content = st.text_area(
+                            "Generated Post Ideas",
+                            value=content,
+                            height=300,
+                            key=f"post_ideas_text_{transcript['id']}"
+                        )
+                        
+                        col1, col2, col3 = st.columns(3)
                         
                         with col1:
-                            # Regenerate button
-                            if st.button("Regenerate Ideas", key=f"regenerate_{transcript['id']}"):
-                                st.session_state.generating_ideas[transcript['id']] = True
-                                st.rerun()
-                                
-                        with col2:
-                            # Save button
                             if st.button("Save Ideas", key=f"save_ideas_{transcript['id']}"):
-                                save_post_ideas(transcript['id'], st.session_state.post_ideas[transcript['id']])
-                                
-                                # Log analytics for post ideas
-                                log_analytics_event(
-                                    transcript['id'],
-                                    "generate_ideas",
-                                    {}
-                                )
-                                
-                                st.success("Ideas saved successfully!")
-                                
-                        with col3:
+                                try:
+                                    # DIRECTLY access the text area value by its key
+                                    current_content = st.session_state.get(f"post_ideas_text_{transcript['id']}", "")
+                                    
+                                    # Debug print
+                                    print(f"DEBUG - Saving content length: {len(current_content)}")
+                                    print(f"DEBUG - First 50 chars: {current_content[:50]}")
+                                    
+                                    if current_content:
+                                        success = save_post_ideas(transcript['id'], current_content)
+                                        if success:
+                                            st.success("Post ideas saved successfully!")
+                                            st.session_state.post_ideas[transcript['id']] = current_content
+                                        else:
+                                            st.error("Failed to save post ideas")
+                                    else:
+                                        st.warning("No content to save")
+                                except Exception as e:
+                                    st.error(f"Error saving post ideas: {str(e)}")
+                                    print(f"Exception details: {e}")
+                        
+                        with col2:
                             # Delete button
                             if st.button("Delete Ideas", key=f"delete_ideas_{transcript['id']}"):
                                 success = delete_post_ideas(transcript['id'])
@@ -664,7 +624,7 @@ if transcripts:
                                 else:
                                     st.error("Failed to delete ideas from database")
                         
-                        with col4:
+                        with col3:
                             # Add download button
                             st.download_button(
                                 "Download Ideas",

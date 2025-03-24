@@ -117,15 +117,35 @@ def delete_transcript(transcript_id):
             conn.close()
 
 def save_post_ideas(transcript_id, content):
-    """Save post ideas for a transcript"""
+    """Save post ideas to the database"""
     conn = None
     try:
         conn = get_connection()
         cursor = conn.cursor()
+        
+        # Debug print to verify content
+        print(f"DEBUG: Saving post ideas. Content type: {type(content)}, length: {len(content)}")
+        
+        # Check if post ideas already exist for this transcript
         cursor.execute(
-            "INSERT INTO post_ideas (transcript_id, content) VALUES (%s, %s) ON CONFLICT (transcript_id) DO UPDATE SET content = %s",
-            (transcript_id, content, content)
+            "SELECT id FROM post_ideas WHERE transcript_id = %s",
+            (transcript_id,)
         )
+        result = cursor.fetchone()
+        
+        if result:
+            # Update existing post ideas
+            cursor.execute(
+                "UPDATE post_ideas SET content = %s, created_at = CURRENT_TIMESTAMP WHERE transcript_id = %s",
+                (content, transcript_id)
+            )
+        else:
+            # Insert new post ideas
+            cursor.execute(
+                "INSERT INTO post_ideas (transcript_id, content) VALUES (%s, %s)",
+                (transcript_id, content)
+            )
+        
         conn.commit()
         return True
     except Exception as e:
@@ -138,17 +158,18 @@ def save_post_ideas(transcript_id, content):
             conn.close()
 
 def get_post_ideas(transcript_id):
-    """Retrieve post ideas for a transcript"""
+    """Get post ideas for a transcript"""
     conn = None
     try:
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT content FROM post_ideas WHERE transcript_id = %s", (transcript_id,))
+        cursor.execute(
+            "SELECT content FROM post_ideas WHERE transcript_id = %s",
+            (transcript_id,)
+        )
         result = cursor.fetchone()
-        if result:
-            return result[0]
-        else:
-            return None
+        # Return just the content string, not the whole tuple
+        return result[0] if result else None
     except Exception as e:
         print(f"Error retrieving post ideas: {e}")
         return None
@@ -269,12 +290,14 @@ def save_transcript_metadata(transcript_id, metadata):
             INSERT INTO transcript_metadata (transcript_id, topics, keywords, sentiment, tags)
             VALUES (%s, %s, %s, %s, %s)
             ON CONFLICT (transcript_id) DO UPDATE
-            SET topics = %s, keywords = %s, sentiment = %s, tags = %s
+            SET topics = EXCLUDED.topics, 
+                keywords = EXCLUDED.keywords, 
+                sentiment = EXCLUDED.sentiment, 
+                tags = EXCLUDED.tags
             """,
-            (transcript_id, topics, keywords, sentiment, tags, topics, keywords, sentiment, tags)
+            (transcript_id, topics, keywords, sentiment, tags)
         )
         conn.commit()
-        print(f"Successfully saved metadata for transcript ID: {transcript_id}")
         return True
     except Exception as e:
         print(f"Error saving transcript metadata: {e}")
