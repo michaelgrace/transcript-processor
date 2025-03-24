@@ -27,6 +27,11 @@ import threading
 # Run database initialization in background thread so it doesn't block the UI
 threading.Thread(target=ensure_tables_exist, daemon=True).start()
 
+# Add this before you use st.session_state.user_role anywhere in your code
+# Preferably close to the top, after st.set_page_config
+if 'user_role' not in st.session_state:
+    st.session_state.user_role = "admin"  # Default to admin for now
+
 # Configure the page with minimal padding
 # Enhanced CSS with stronger hiding rules for branding and subtle button styling
 st.markdown("""
@@ -249,7 +254,6 @@ if uploaded_file is not None:
                 
             # Save button
             if st.button("Save to Database"):
-                
                 # Determine source type based on file extension
                 source_type = "pdf" if uploaded_file.name.lower().endswith('.pdf') else "transcript"
                 
@@ -262,14 +266,15 @@ if uploaded_file is not None:
                     source_type=source_type
                 )
                 
-                # IMPORTANT: ADD THIS CHECK
+                # Only proceed if save was successful
                 if transcript_id is not None:
-                    # Only try to update embedding and metadata if transcript_id is valid
-                    
                     # Generate and store metadata
-                    metadata = analyze_transcript_metadata(processed_content)
-                    if metadata:
-                        save_transcript_metadata(transcript_id, metadata)
+                    with st.spinner("Analyzing content metadata..."):
+                        metadata = analyze_transcript_metadata(processed_content)
+                        if metadata:
+                            success = save_transcript_metadata(transcript_id, metadata)
+                            if not success:
+                                st.warning("Metadata analysis saved with errors")
                     
                     # Log analytics event
                     log_analytics_event(
@@ -299,24 +304,15 @@ with st.sidebar:
     if st.session_state.user_role == "admin":  # Only show for admin users
         with st.expander("📊 Analytics Dashboard"):
             analytics = get_analytics_summary()
-            
-            st.markdown("<h3>Usage by Feature</h3>", unsafe_allow_html=True)
-            if "action_counts" in analytics and analytics["action_counts"]:
-                df_actions = pd.DataFrame(analytics["action_counts"], columns=["Action", "Count"])
-                fig = px.bar(df_actions, x="Action", y="Count")
-                fig.update_layout(
-                    margin=dict(l=10, r=10, t=30, b=10),
-                    height=200,
-                    title=None,
-                    font=dict(size=9),
-                )
-                st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-            else:
-                st.info("No analytics data available yet")
                 
-            st.markdown("<h3>Popular Options</h3>", unsafe_allow_html=True)
+            st.markdown("<h3>Popular Rewrite Options</h3>", unsafe_allow_html=True)
             if "popular_options" in analytics and analytics["popular_options"]:
                 df_options = pd.DataFrame(analytics["popular_options"], columns=["Options", "Count"])
+                
+                # Clean up option names for display
+                df_options["Options"] = df_options["Options"].map(lambda x: x.replace("_", " ").title())
+                
+                # Create the chart
                 fig = px.pie(df_options, values="Count", names="Options")
                 fig.update_layout(
                     margin=dict(l=10, r=10, t=10, b=10),
@@ -325,17 +321,68 @@ with st.sidebar:
                     font=dict(size=9),
                 )
                 st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+            else:
+                st.info("No rewrite options data available yet")
             
             st.markdown("<h3>Format Styles</h3>", unsafe_allow_html=True)
             if "popular_formats" in analytics and analytics["popular_formats"]:
                 df_formats = pd.DataFrame(analytics["popular_formats"], columns=["Format", "Count"])
+                
+                # Create the chart
                 fig = px.bar(df_formats, x="Format", y="Count")
                 fig.update_layout(
                     margin=dict(l=10, r=10, t=10, b=10),
                     height=200,
                     font=dict(size=9),
+                    xaxis_title=None,
+                    yaxis_title=None
                 )
                 st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+            else:
+                st.info("No format style data available yet")
+                
+            # Add Common Topics chart
+            st.markdown("<h3>Common Topics</h3>", unsafe_allow_html=True)
+            if "common_topics" in analytics and analytics["common_topics"]:
+                df_topics = pd.DataFrame(analytics["common_topics"], columns=["Topic", "Count"])
+                
+                # Create the chart
+                fig = px.bar(df_topics, x="Topic", y="Count")
+                fig.update_layout(
+                    margin=dict(l=10, r=10, t=10, b=10),
+                    height=200,
+                    font=dict(size=9),
+                    xaxis_title=None,
+                    yaxis_title=None
+                )
+                st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+            else:
+                st.info("No topic data available yet")
+                
+            # Add Sentiment Distribution chart
+            st.markdown("<h3>Sentiment Distribution</h3>", unsafe_allow_html=True)
+            if "sentiment_distribution" in analytics and analytics["sentiment_distribution"]:
+                df_sentiment = pd.DataFrame(analytics["sentiment_distribution"], columns=["Sentiment", "Count"])
+                
+                # Create a pie chart for sentiment
+                colors = {
+                    'positive': 'green',
+                    'negative': 'red',
+                    'neutral': 'blue'
+                }
+                
+                fig = px.pie(df_sentiment, values="Count", names="Sentiment", 
+                             color="Sentiment", 
+                             color_discrete_map=colors)
+                fig.update_layout(
+                    margin=dict(l=10, r=10, t=10, b=10),
+                    height=200,
+                    legend=dict(font=dict(size=8)),
+                    font=dict(size=9),
+                )
+                st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+            else:
+                st.info("No sentiment data available yet")
 
 # History section
 st.divider()
@@ -546,12 +593,10 @@ if transcripts:
                     )
                     
                     # Check for contradictory options
-                    if "Shorter" in options and "Longer" in options:
-                        st.error("Cannot select both 'Shorter' and 'Longer' options. Please choose only one.")
-                        if "Shorter" in options and "Shorter" not in st.session_state.rewrite_options.get(transcript['id'], []):
-                            options.remove("Longer")
-                        elif "Longer" in options and "Longer" not in st.session_state.rewrite_options.get(transcript['id'], []):
-                            options.remove("Shorter")
+                    if "Shorter" in options and "Shorter" not in st.session_state.rewrite_options.get(transcript['id'], []):
+                        options.remove("Longer")
+                    elif "Longer" in options and "Longer" not in st.session_state.rewrite_options.get(transcript['id'], []):
+                        options.remove("Shorter")
                     
                     # Update options in session state
                     st.session_state.rewrite_options[transcript['id']] = options
