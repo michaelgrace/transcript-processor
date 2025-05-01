@@ -13,3 +13,9 @@ data/*.db
 
 # Misc
 .DS_Store
+docker-compose - Copy.yml
+backup-project.ps1
+*.txt
+
+# folder
+.github/
