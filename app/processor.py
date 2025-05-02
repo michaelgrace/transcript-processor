@@ -11,7 +11,7 @@ load_dotenv()
 openai.api_key = os.getenv("API_KEY")
 AI_MODEL = os.getenv("AI_MODEL", "gpt-4")
 
-def process_srt(content, add_paragraphs=True, add_headings=True, fix_grammar=True, highlight_key_points=True, format_style="Article"):
+def process_srt(content, add_paragraphs=True, add_headings=True, fix_grammar=True, highlight_key_points=True, format_style="Article", rewrite_options=None):
     """Process SRT file content"""
     try:
         # Parse SRT content
@@ -23,17 +23,20 @@ def process_srt(content, add_paragraphs=True, add_headings=True, fix_grammar=Tru
         # Remove HTML tags if any
         text = re.sub(r'<.*?>', '', text)
         
-        return format_text(text, add_paragraphs, add_headings, fix_grammar, highlight_key_points, format_style)
+        return format_text(text, add_paragraphs, add_headings, fix_grammar, highlight_key_points, format_style, rewrite_options)
     except Exception as e:
         print(f"SRT processing error: {e}")
         # If SRT parsing fails, treat as plain text
-        return format_text(content, add_paragraphs, add_headings, fix_grammar, highlight_key_points, format_style)
+        return format_text(content, add_paragraphs, add_headings, fix_grammar, highlight_key_points, format_style, rewrite_options)
 
-def process_text(content, add_paragraphs=True, add_headings=True, fix_grammar=True, highlight_key_points=True, format_style="Article"):
+def process_text(content, add_paragraphs=True, add_headings=True, fix_grammar=True, highlight_key_points=True, format_style="Article", rewrite_options=None):
     """Process plain text file content"""
-    return format_text(content, add_paragraphs, add_headings, fix_grammar, highlight_key_points, format_style)
+    return format_text(content, add_paragraphs, add_headings, fix_grammar, highlight_key_points, format_style, rewrite_options)
 
-def format_text(text, add_paragraphs=True, add_headings=True, fix_grammar=True, highlight_key_points=True, format_style="Article"):
+def format_text(
+    text, add_paragraphs=True, add_headings=True, fix_grammar=True, highlight_key_points=True,
+    format_style="Article", rewrite_options=None
+):
     """Format text using OpenAI API"""
     
     # Build the system prompt based on formatting options
@@ -48,7 +51,10 @@ def format_text(text, add_paragraphs=True, add_headings=True, fix_grammar=True, 
     
     if add_headings:
         system_instructions.append("Insert appropriate section headings (using markdown # syntax) to highlight main topics and improve document structure.")
-    
+    else:
+        # Explicitly instruct the model NOT to add headings
+        system_instructions.append("Do not add any headings or section titles. Do not use markdown # syntax or similar heading formatting. Only use plain text or paragraphs.")
+
     if fix_grammar:
         system_instructions.append("Fix grammar, punctuation, and sentence structure while preserving the original meaning.")
     else:
@@ -73,6 +79,27 @@ def format_text(text, add_paragraphs=True, add_headings=True, fix_grammar=True, 
         system_instructions.append("Organize with clear thesis statements and supporting evidence.")
         system_instructions.append("Use numbered sections for different topics or arguments.")
     
+    # Add rewrite options to system prompt
+    if rewrite_options:
+        for opt in rewrite_options:
+            opt_lc = opt.lower().replace(" ", "_")
+            if opt_lc == "clear_&_simple" or opt_lc == "clear_simple":
+                system_instructions.append("Use clear, confident language suitable for an 8th-grade reading level. Be authoritative but avoid overly complex vocabulary or jargon.")
+            elif opt_lc == "professional":
+                system_instructions.append("Use a balanced, measured tone appropriate for business contexts. Be precise and thoughtful, avoiding filler language.")
+            elif opt_lc == "storytelling":
+                system_instructions.append("Reshape the content into a narrative flow with a clear beginning, middle, and end. Use descriptive language and transitional phrases.")
+            elif opt_lc == "youtube_script":
+                system_instructions.append("Structure the content as an engaging video script with clear sections. Use conversational cues and format with intro, body, and conclusion.")
+            elif opt_lc == "educational":
+                system_instructions.append("Present information in a structured, easy-to-follow format that facilitates learning. Include examples and analogies.")
+            elif opt_lc == "balanced":
+                system_instructions.append("Use a mature but approachable tone that connects with the reader. Balance friendliness with substance.")
+            elif opt_lc == "shorter":
+                system_instructions.append("Reduce the word count by approximately 25% while preserving all key information. Focus on concise phrasing.")
+            elif opt_lc == "longer":
+                system_instructions.append("Expand the content by approximately 25% with additional context, examples, and detail.")
+    
     system_prompt = "\n".join(system_instructions)
     
     try:
@@ -91,9 +118,10 @@ def format_text(text, add_paragraphs=True, add_headings=True, fix_grammar=True, 
         print(f"Error formatting text: {e}")
         return text  # Return original text if formatting fails
 
-def detect_and_process(content, filename, add_paragraphs=True, add_headings=True, 
-                      fix_grammar=True, highlight_key_points=True, format_style="Article", 
-                      is_binary=False):
+def detect_and_process(
+    content, filename, add_paragraphs=True, add_headings=True, fix_grammar=True, highlight_key_points=True,
+    format_style="Article", is_binary=False, rewrite_options=None
+):
     """
     Detect file type and process accordingly
     If is_binary is True, content is treated as binary data (for PDF files)
@@ -114,7 +142,8 @@ def detect_and_process(content, filename, add_paragraphs=True, add_headings=True
             add_headings=add_headings,
             fix_grammar=fix_grammar,
             highlight_key_points=highlight_key_points,
-            format_style=format_style
+            format_style=format_style,
+            rewrite_options=rewrite_options
         )
     # Process SRT files
     elif file_extension == '.srt':
@@ -125,7 +154,8 @@ def detect_and_process(content, filename, add_paragraphs=True, add_headings=True
             add_headings=add_headings,
             fix_grammar=fix_grammar,
             highlight_key_points=highlight_key_points,
-            format_style=format_style
+            format_style=format_style,
+            rewrite_options=rewrite_options
         )
     # Process other text files
     else:
@@ -136,7 +166,8 @@ def detect_and_process(content, filename, add_paragraphs=True, add_headings=True
             add_headings=add_headings,
             fix_grammar=fix_grammar,
             highlight_key_points=highlight_key_points,
-            format_style=format_style
+            format_style=format_style,
+            rewrite_options=rewrite_options
         )
     
     # Adjust heading sizes as the final step
@@ -358,8 +389,7 @@ def analyze_transcript_metadata(content):
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Analyze this transcript:\n\n{content[:8000]}"}
             ],
-            temperature=0.1,  # Low temperature for consistent analysis
-            response_format={"type": "json_object"}  # Request JSON response
+            temperature=0.1  # Low temperature for consistent analysis
         )
         
         # Extract and parse JSON response
@@ -376,8 +406,6 @@ def analyze_transcript_metadata(content):
             "sentiment": {"classification": "neutral", "confidence": 0.5},
             "tags": []
         }
-
-
 
 def extract_text_from_pdf(pdf_content):
     """

@@ -3,6 +3,10 @@ import pandas as pd
 import os
 import plotly.express as px
 from datetime import datetime, timedelta
+import sys
+
+# Ensure the app directory is in sys.path for module resolution in all environments
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Configure page after imports
 st.set_page_config(
@@ -11,7 +15,11 @@ st.set_page_config(
     layout="wide"
 )
 
-from processor import detect_and_process, generate_post_ideas, rewrite_transcript, analyze_transcript_metadata
+try:
+    from app.processor import detect_and_process, generate_post_ideas, rewrite_transcript, analyze_transcript_metadata
+except ImportError:
+    from processor import detect_and_process, generate_post_ideas, rewrite_transcript, analyze_transcript_metadata
+
 from database import (
     save_transcript, get_transcript, get_all_transcripts, delete_transcript, 
     save_post_ideas, get_post_ideas, delete_post_ideas,
@@ -119,6 +127,22 @@ with st.expander("Formatting Options", expanded=False):
         index=0
     )
 
+    # Add rewrite options here
+    rewrite_options = st.multiselect(
+        "Rewrite Style Options",
+        [
+            "Clear & Simple",
+            "Professional",
+            "Storytelling",
+            "YouTube Script",
+            "Educational",
+            "Balanced",
+            "Shorter",
+            "Longer"
+        ],
+        help="Choose one or more rewrite styles to apply to the processed content."
+    )
+
 if st.session_state.user_role == "admin":
     with st.expander("📊 Analytics Dashboard", expanded=False):
 
@@ -198,128 +222,204 @@ if st.session_state.user_role == "admin":
             else:
                 st.info("No sentiment data available yet")
 
-# Update the file uploader to accept PDF files
-uploaded_file = st.file_uploader("Choose a file", type=["srt", "txt", "pdf"])
+# Add two tabs: Upload File (default) and Paste Text
+tab_upload, tab_paste = st.tabs(["Upload File", "Paste Text"])
 
-# Add this near your file upload code in main.py
-if uploaded_file is not None:
-    # Read file content
-    try:
-        if uploaded_file.name.lower().endswith('.pdf'):
-            # Read file content as binary for PDFs
-            file_content_binary = uploaded_file.read()
-            
-            # Log for debugging
-            st.info(f"Processing PDF file: {uploaded_file.name}")
-            
-            # Process the binary content directly
-            processed_content = detect_and_process(
-                file_content_binary,
-                uploaded_file.name,
-                add_paragraphs,
-                add_headings,
-                fix_grammar,
-                highlight_key_points,
-                format_style,
-                is_binary=True
-            )
-            
-            # Also extract text for display in the original content tab
-            from processor import extract_text_from_pdf
-            file_content = extract_text_from_pdf(file_content_binary)
-        else:
-            # For non-PDF files, read as text
-            file_content = uploaded_file.read().decode("utf-8")
-            
-            # Log for debugging
-            st.info(f"Processing {uploaded_file.name.split('.')[-1].upper()} file: {uploaded_file.name}")
-            
-            # Process the file with formatting options
-            with st.spinner("Processing transcript... This may take a moment."):
+with tab_upload:
+    # Update the file uploader to accept PDF files
+    uploaded_file = st.file_uploader("Choose a file", type=["srt", "txt", "pdf"])
+
+    if uploaded_file is not None:
+        # Read file content
+        try:
+            if uploaded_file.name.lower().endswith('.pdf'):
+                # Read file content as binary for PDFs
+                file_content_binary = uploaded_file.read()
+                
+                # Log for debugging
+                st.info(f"Processing PDF file: {uploaded_file.name}")
+                
+                # Process the binary content directly
                 processed_content = detect_and_process(
-                    file_content, 
+                    file_content_binary,
                     uploaded_file.name,
                     add_paragraphs,
                     add_headings,
                     fix_grammar,
                     highlight_key_points,
-                    format_style
+                    format_style,
+                    is_binary=True,
+                    rewrite_options=rewrite_options  # Pass rewrite options
                 )
                 
-                # Log success
-                if processed_content:
-                    st.success("Processing complete!")
-                    print(f"Processed content length: {len(processed_content)}")
-                else:
-                    st.error("Processing failed - no content returned")
-
-        # Create tabs for original and processed content
-        tab2, tab1 = st.tabs(["Processed Content", "Original Content"])
-        
-        with tab1:
-            st.text_area("Original Content", file_content, height=300, key="upload_original_content")
-        
-        with tab2:
-            # Display processed content - no need to process again!
-            if "#" in processed_content or "**" in processed_content or "*" in processed_content:
-                st.markdown(processed_content)
-                
-                # Download button
-                st.download_button(
-                    "Download Markdown",
-                    processed_content,
-                    file_name=f"{os.path.splitext(uploaded_file.name)[0]}_formatted.md",
-                    mime="text/markdown"
-                )
+                # Also extract text for display in the original content tab
+                from processor import extract_text_from_pdf
+                file_content = extract_text_from_pdf(file_content_binary)
             else:
-                st.text_area("Processed Content", processed_content, height=300, key="upload_processed_content")
+                # For non-PDF files, read as text
+                file_content = uploaded_file.read().decode("utf-8")
                 
-            # Save button
-            if st.button("Save to Database"):
-                # Determine source type based on file extension
-                source_type = "pdf" if uploaded_file.name.lower().endswith('.pdf') else "transcript"
+                # Log for debugging
+                st.info(f"Processing {uploaded_file.name.split('.')[-1].upper()} file: {uploaded_file.name}")
                 
-                # Save transcript to database
-                transcript_id = save_transcript(
-                    filename=uploaded_file.name,
-                    original_content=file_content,
-                    processed_content=processed_content,
-                    format_style=format_style,
-                    source_type=source_type
-                )
-                
-                # Only proceed if save was successful
-                if transcript_id is not None:
-                    # Generate and store metadata
-                    with st.spinner("Analyzing content metadata..."):
-                        metadata = analyze_transcript_metadata(processed_content)
-                        if metadata:
-                            success = save_transcript_metadata(transcript_id, metadata)
-                            if not success:
-                                st.warning("Metadata analysis saved with errors")
+                # Process the file with formatting options
+                with st.spinner("Processing transcript... This may take a moment."):
+                    processed_content = detect_and_process(
+                        file_content, 
+                        uploaded_file.name,
+                        add_paragraphs,
+                        add_headings,
+                        fix_grammar,
+                        highlight_key_points,
+                        format_style,
+                        rewrite_options=rewrite_options  # Pass rewrite options
+                    )
                     
-                    # Log analytics event
+                    # Log success
+                    if processed_content:
+                        st.success("Processing complete!")
+                        print(f"Processed content length: {len(processed_content)}")
+                    else:
+                        st.error("Processing failed - no content returned")
+
+            # Create tabs for original and processed content
+            tab2, tab1 = st.tabs(["Processed Content", "Original Content"])
+            
+            with tab1:
+                st.text_area("Original Content", file_content, height=300, key="upload_original_content")
+            
+            with tab2:
+                # Display processed content - no need to process again!
+                if "#" in processed_content or "**" in processed_content or "*" in processed_content:
+                    st.markdown(processed_content)
+                    
+                    # Download button
+                    st.download_button(
+                        "Download Markdown",
+                        processed_content,
+                        file_name=f"{os.path.splitext(uploaded_file.name)[0]}_formatted.md",
+                        mime="text/markdown"
+                    )
+                else:
+                    st.text_area("Processed Content", processed_content, height=300, key="upload_processed_content")
+                    
+                # Save button
+                if st.button("Save to Database"):
+                    # Determine source type based on file extension
+                    source_type = "pdf" if uploaded_file.name.lower().endswith('.pdf') else "transcript"
+                    
+                    # Save transcript to database
+                    transcript_id = save_transcript(
+                        filename=uploaded_file.name,
+                        original_content=file_content,
+                        processed_content=processed_content,
+                        format_style=format_style,
+                        source_type=source_type
+                    )
+                    
+                    # Only proceed if save was successful
+                    if transcript_id is not None:
+                        # Generate and store metadata
+                        with st.spinner("Analyzing content metadata..."):
+                            metadata = analyze_transcript_metadata(processed_content)
+                            if metadata:
+                                success = save_transcript_metadata(transcript_id, metadata)
+                                if not success:
+                                    st.warning("Metadata analysis saved with errors")
+                        
+                        # Log analytics event
+                        log_analytics_event(
+                            transcript_id, 
+                            "format", 
+                            {
+                                "format_style": format_style,
+                                "add_paragraphs": add_paragraphs,
+                                "add_headings": add_headings,
+                                "fix_grammar": fix_grammar,
+                                "highlight_key_points": highlight_key_points,
+                                "rewrite_options": rewrite_options
+                            }
+                        )
+                        
+                        st.success(f"Saved transcript with ID: {transcript_id}")
+                    else:
+                        st.error("Failed to save transcript to database. Check logs for details.")
+        except Exception as e:
+            st.error(f"Error processing file: {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
+
+with tab_paste:
+    st.subheader("Paste or Edit Transcript Text")
+    pasted_text = st.text_area("Paste your transcript here", height=300, key="pasted_text_area")
+    pasted_title = st.text_input("Title", key="pasted_title")
+
+    if st.button("Process Pasted Text", key="process_pasted_text"):
+        if not pasted_text.strip():
+            st.warning("Please paste some text to process.")
+        elif not pasted_title.strip():
+            st.warning("Please specify a title.")
+        else:
+            with st.spinner("Processing pasted text..."):
+                processed_content = detect_and_process(
+                    pasted_text,
+                    pasted_title,  # Use title as filename for processing
+                    add_paragraphs,
+                    add_headings,
+                    fix_grammar,
+                    highlight_key_points,
+                    format_style,
+                    is_binary=False,
+                    rewrite_options=rewrite_options  # Pass rewrite options
+                )
+                st.session_state["pasted_processed_content"] = processed_content
+                st.session_state["pasted_original_content"] = pasted_text
+                st.success("Processing complete!")
+
+    # Show processed content if available
+    if st.session_state.get("pasted_processed_content"):
+        tab2, tab1 = st.tabs(["Processed Content", "Original Content"])
+        with tab1:
+            st.text_area("Original Content", st.session_state.get("pasted_original_content", ""), height=300, key="pasted_original_content_display")
+        with tab2:
+            st.markdown(st.session_state["pasted_processed_content"])
+            # Use the pasted_title variable directly
+            download_title = pasted_title.strip() or "pasted_content"
+            st.download_button(
+                "Download Text",
+                st.session_state["pasted_processed_content"],
+                file_name=f"{download_title}.txt",
+                mime="text/plain"
+            )
+            # Save to DB button
+            if st.button("Save to Database", key="save_pasted_to_db"):
+                transcript_id = save_transcript(
+                    filename=download_title,
+                    original_content=st.session_state["pasted_original_content"],
+                    processed_content=st.session_state["pasted_processed_content"],
+                    format_style=format_style,
+                    source_type="pasted"
+                )
+                if transcript_id is not None:
+                    with st.spinner("Analyzing content metadata..."):
+                        metadata = analyze_transcript_metadata(st.session_state["pasted_processed_content"])
+                        if metadata:
+                            save_transcript_metadata(transcript_id, metadata)
                     log_analytics_event(
-                        transcript_id, 
-                        "format", 
+                        transcript_id,
+                        "format",
                         {
                             "format_style": format_style,
                             "add_paragraphs": add_paragraphs,
                             "add_headings": add_headings,
                             "fix_grammar": fix_grammar,
-                            "highlight_key_points": highlight_key_points
+                            "highlight_key_points": highlight_key_points,
+                            "rewrite_options": rewrite_options
                         }
                     )
-                    
                     st.success(f"Saved transcript with ID: {transcript_id}")
                 else:
                     st.error("Failed to save transcript to database. Check logs for details.")
-    except Exception as e:
-        st.error(f"Error processing file: {str(e)}")
-        import traceback
-        st.code(traceback.format_exc())
-
-# Add this just before the "History section" (where you have st.divider())
 
 # History section
 st.divider()
@@ -335,19 +435,6 @@ if 'generating_ideas' not in st.session_state:
 if 'post_ideas' not in st.session_state:
     st.session_state.post_ideas = {}
 
-# New session state variables for rewrite feature
-if 'show_rewrite_tab' not in st.session_state:
-    st.session_state.show_rewrite_tab = {}
-    
-if 'generating_rewrite' not in st.session_state:
-    st.session_state.generating_rewrite = {}
-
-if 'rewrite_content' not in st.session_state:
-    st.session_state.rewrite_content = {}
-
-if 'rewrite_options' not in st.session_state:
-    st.session_state.rewrite_options = {}
-
 # Add this near your other session state initialization
 if 'user_role' not in st.session_state:
     st.session_state.user_role = "admin"  # Default to admin for now, you can implement proper auth later
@@ -361,15 +448,11 @@ if 'delete_transcript' in st.session_state and st.session_state.delete_transcrip
     st.session_state.delete_transcript = None
     st.rerun()
 
-# Update the section that initializes the transcript state
-
 transcripts = get_all_transcripts()
 if transcripts:
     for i, transcript in enumerate(transcripts):
-        #delete_key = f"delete_{transcript.id}"
         delete_key = f"delete_{transcript['id']}"
         ideas_key = f"ideas_{transcript['id']}"
-        rewrite_key = f"rewrite_{transcript['id']}"
         expander_label = f"**{transcript['filename']}** (ID: {transcript['id']})"
         
         with st.expander(expander_label):
@@ -383,32 +466,13 @@ if transcripts:
                 st.session_state.generating_ideas[transcript['id']] = False
                 
                 # Store the ideas content in session state if available
-                # Since existing_ideas is a tuple from database cursor, access by index
                 if existing_ideas:
-                    #st.session_state.post_ideas[transcript['id']] = existing_ideas[0]
                     st.session_state.post_ideas[transcript['id']] = existing_ideas
                 else:
                     st.session_state.post_ideas[transcript['id']] = ""
             
-            # Initialize rewrite state for this transcript if needed
-            if transcript['id'] not in st.session_state.show_rewrite_tab:
-                # Check if rewrites exist for this transcript in the database
-                existing_rewrite = get_rewrite(transcript['id'])
-                
-                # If rewrite exists in DB, show the tab automatically
-                st.session_state.show_rewrite_tab[transcript['id']] = existing_rewrite is not None
-                st.session_state.generating_rewrite[transcript['id']] = False
-                
-                # Store the rewrite content in session state if available
-                if existing_rewrite:
-                    st.session_state.rewrite_content[transcript['id']] = existing_rewrite["content"]
-                    st.session_state.rewrite_options[transcript['id']] = existing_rewrite["options"]
-                else:
-                    st.session_state.rewrite_options[transcript['id']] = []
-            
             # Get current state
             show_ideas = st.session_state.show_ideas_tab[transcript['id']]
-            show_rewrite = st.session_state.show_rewrite_tab[transcript['id']]
             
             # Create tabs based on what should be shown
             tabs = []
@@ -416,8 +480,6 @@ if transcripts:
 
             if show_ideas:
                 tab_names.append("Post Ideas")
-            if show_rewrite:
-                tab_names.append("Rewrite")
             if st.session_state.user_role == "admin":  # Only show these tabs for admin users
                 tab_names.append("Metadata")
 
@@ -431,10 +493,6 @@ if transcripts:
             # Conditionally assign the rest of the tabs
             if show_ideas:
                 ideas_tab = all_tabs[current_tab_index]
-                current_tab_index += 1
-
-            if show_rewrite:
-                rewrite_tab = all_tabs[current_tab_index]
                 current_tab_index += 1
 
             if st.session_state.user_role == "admin":
@@ -468,92 +526,6 @@ if transcripts:
                     st.session_state.show_ideas_tab[transcript['id']] = True
                     st.session_state.generating_ideas[transcript['id']] = True
                     st.rerun()
-                
-                # Add Rewrite button and options
-                with st.container():
-                    # Get or initialize rewrite options for this transcript
-                    if transcript['id'] not in st.session_state.rewrite_options:
-                        st.session_state.rewrite_options[transcript['id']] = []
-                    
-                    # Modify the part where you're handling the multiselect options
-                    # Get the existing database options and ensure they match the format in the multiselect
-                    if transcript['id'] in st.session_state.rewrite_options and st.session_state.rewrite_options[transcript['id']]:
-                        # Normalize the saved options to match exactly what's in the multiselect dropdown
-                        normalized_options = []
-                        for option in st.session_state.rewrite_options[transcript['id']]:
-                            if isinstance(option, str):
-                                # Convert options like "youtube_script" to "YouTube Script"
-                                if option.lower() == "clear_simple":
-                                    normalized_options.append("Clear & Simple")
-                                elif option.lower() == "professional":
-                                    normalized_options.append("Professional")
-                                elif option.lower() == "storytelling":
-                                    normalized_options.append("Storytelling")
-                                elif option.lower() == "youtube_script":
-                                    normalized_options.append("YouTube Script")
-                                elif option.lower() == "educational":
-                                    normalized_options.append("Educational")
-                                elif option.lower() == "balanced":
-                                    normalized_options.append("Balanced")
-                                elif option.lower() == "shorter":
-                                    normalized_options.append("Shorter")
-                                elif option.lower() == "longer":
-                                    normalized_options.append("Longer")
-                                # Add direct matches
-                                elif option in ["Clear & Simple", "Professional", "Storytelling", "YouTube Script", "Educational", "Balanced", "Shorter", "Longer"]:
-                                    normalized_options.append(option)
-
-                        # Update the session state with normalized options
-
-                        st.session_state.rewrite_options[transcript['id']] = normalized_options
-
-                    # Now use the normalized options in the multiselect
-                    available_options = [
-                        "Clear & Simple", # Replaces Authoritative - confident but 8th grade level
-                        "Professional", # New - business appropriate, measured tone
-                        "Storytelling", # New - narrative structure with engaging flow
-                        "YouTube Script",
-                        "Educational", # New - explains concepts clearly with examples
-                        "Balanced", # New - replaces Conversational - mature but approachable
-                        "Shorter",
-                        "Longer"
-                    ]
-
-                    # Filter default values to ensure they exist in options
-                    default_options = []
-                    for opt in st.session_state.rewrite_options.get(transcript['id'], []):
-                        if opt in available_options:
-                            default_options.append(opt)
-
-                    # Use the filtered defaults
-                    options = st.multiselect(
-                        "Rewrite Options",
-                        available_options,
-                        default=default_options,
-                        key=f"options_{transcript['id']}"
-                    )
-                    
-                    # Check for contradictory options
-                    if "Shorter" in options and "Shorter" not in st.session_state.rewrite_options.get(transcript['id'], []):
-                        options.remove("Longer")
-                    elif "Longer" in options and "Longer" not in st.session_state.rewrite_options.get(transcript['id'], []):
-                        options.remove("Shorter")
-                    
-                    # Update options in session state
-                    st.session_state.rewrite_options[transcript['id']] = options
-                    
-                    # Define the rewrite button here - THIS WAS MISSING
-                    rewrite_button = st.button("Rewrite", key=rewrite_key, 
-                                              disabled=len(options) == 0)
-                    
-                    # Handle rewrite button click
-                    if rewrite_button:
-                        if len(options) > 0:
-                            st.session_state.show_rewrite_tab[transcript['id']] = True
-                            st.session_state.generating_rewrite[transcript['id']] = True
-                            st.rerun()
-                        else:
-                            st.error("Please select at least one rewrite option.")
             
             # Handle Ideas tab if activated
             if show_ideas:
@@ -565,7 +537,6 @@ if transcripts:
                             existing_ideas = get_post_ideas(transcript['id'])
                             
                             if existing_ideas:
-                                # existing_ideas is now directly the content string
                                 st.session_state.post_ideas[transcript['id']] = existing_ideas
                             else:
                                 # Generate new ideas
@@ -633,84 +604,6 @@ if transcripts:
                                 mime="text/markdown",
                                 key=f"download_ideas_{transcript['id']}"
                             )
-            
-            # Handle Rewrite tab if activated
-            if show_rewrite:
-                with rewrite_tab:
-                    # Check if we need to generate a rewrite
-                    if st.session_state.generating_rewrite[transcript['id']]:
-                        with st.spinner("Rewriting transcript... This may take a moment."):
-                            # Process options to lowercase for API
-                            api_options = [opt.lower().replace(" ", "_") for opt in st.session_state.rewrite_options[transcript['id']]]
-                            
-                            # Either load existing rewrite or generate new one
-                            existing_rewrite = get_rewrite(transcript['id'])
-                            
-                            # Check if rewrite exists with same options
-                            if existing_rewrite and set(existing_rewrite["options"]) == set(api_options):
-                                rewrite_content = existing_rewrite["content"]
-                            else:
-                                # Generate new rewrite
-                                rewrite_content = rewrite_transcript(transcript['processed_content'], api_options)
-                            
-                            st.session_state.rewrite_content[transcript['id']] = rewrite_content
-                            st.session_state.generating_rewrite[transcript['id']] = False
-                    
-                    # Display rewrite content
-                    if transcript['id'] in st.session_state.rewrite_content:
-                        content = st.session_state.rewrite_content[transcript['id']]
-                        
-                        # Check for error message
-                        if content.startswith("ERROR:"):
-                            st.error(content)
-                        else:
-                            if "#" in content or "**" in content or "*" in content:
-                                st.markdown(content)
-                            else:
-                                st.text_area("Rewritten Content", content, height=300, key=f"rewrite_content_{transcript['id']}")
-                            
-                            # Add action buttons without the container
-                            col1, col2, col3, col4 = st.columns(4)
-
-                            with col1:
-                                if st.button("Regenerate", key=f"regenerate_rewrite_{transcript['id']}"):
-                                    st.session_state.generating_rewrite[transcript['id']] = True
-                                    st.rerun()
-                                    
-                            with col2:
-                                if st.button("Save Rewrite", key=f"save_rewrite_{transcript['id']}"):
-                                    selected_options = options
-                                    save_rewrite(transcript['id'], content, selected_options)
-                                    
-                                    # Log analytics for this rewrite
-                                    log_analytics_event(
-                                        transcript['id'],
-                                        "rewrite",
-                                        {"options": selected_options}
-                                    )
-                                    
-                                    st.success("Rewrite saved successfully!")
-                                    
-                            with col3:
-                                if st.button("Delete Rewrite", key=f"delete_rewrite_{transcript['id']}"):
-                                    success = delete_rewrite(transcript['id'])
-                                    if success:
-                                        st.success("Rewrite deleted successfully")
-                                        st.session_state.rewrite_content.pop(transcript['id'], None)
-                                        st.session_state.show_rewrite_tab[transcript['id']] = False
-                                        st.session_state.rewrite_options[transcript['id']] = []
-                                        st.rerun()
-                                    else:
-                                        st.error("Failed to delete rewrite from database")
-                                
-                            with col4:
-                                st.download_button(
-                                    "Download Rewrite",
-                                    content,
-                                    file_name=f"{transcript['filename'].split('.')[0]}_rewritten.md",
-                                    mime="text/markdown",
-                                    key=f"download_rewrite_{transcript['id']}"
-                                )
 
             if st.session_state.user_role == "admin" and "metadata_tab" in locals():
                 with metadata_tab:
@@ -776,8 +669,5 @@ if transcripts:
 
 else:
     st.info("No transcripts have been processed yet.")
-
-
-# Modify the transcript processing logic to generate and store embeddings and metadata
 
 
