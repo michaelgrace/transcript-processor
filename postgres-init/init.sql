@@ -1,4 +1,6 @@
 -- Create tables if they don't exist
+CREATE EXTENSION IF NOT EXISTS vector;
+
 CREATE TABLE IF NOT EXISTS transcripts (
     id SERIAL PRIMARY KEY,
     filename VARCHAR(255) NOT NULL,

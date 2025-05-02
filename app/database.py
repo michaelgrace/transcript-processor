@@ -48,6 +48,27 @@ def save_transcript(filename, original_content, processed_content, format_style,
         if conn:
             conn.close()
 
+def update_transcript(transcript_id, processed_content):
+    """Update the processed content of an existing transcript"""
+    conn = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE transcripts SET processed_content = %s WHERE id = %s",
+            (processed_content, transcript_id)
+        )
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Error updating transcript: {e}")
+        if conn:
+            conn.rollback()
+        return False
+    finally:
+        if conn:
+            conn.close()
+
 def get_transcript(transcript_id):
     """Retrieve a transcript by ID"""
     conn = None
@@ -574,3 +595,34 @@ def ensure_tables_exist():
     finally:
         if conn:
             conn.close()
+
+def save_embedding(transcript_id, embedding):
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        # embedding should be a list or numpy array of floats
+        cursor.execute(
+            "UPDATE transcripts SET embedding = %s WHERE id = %s",
+            (embedding, transcript_id)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+def find_similar_transcripts(query_embedding, top_k=5):
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT id, filename, embedding <-> %s AS distance
+            FROM transcripts
+            WHERE embedding IS NOT NULL
+            ORDER BY embedding <-> %s
+            LIMIT %s
+            """,
+            (query_embedding, query_embedding, top_k)
+        )
+        return cursor.fetchall()
+    finally:
+        conn.close()

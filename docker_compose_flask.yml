@@ -1,0 +1,57 @@
+services:
+  process:
+    container_name: transcripts-flask
+    build:
+      context: .
+      dockerfile: Dockerfile-flask
+    ports:
+      - "${HOST_FLASK_PORT:-9001}:${FLASK_PORT:-9001}"
+    volumes:
+      - .:/app
+    depends_on:
+      - db
+    environment:
+      - DB_CONNECTION_STRING=${DB_CONNECTION_STRING}
+      - PYTHONUNBUFFERED=1
+      - AI_MODEL=${AI_MODEL}
+      - API_KEY=${API_KEY}
+      - FLASK_PORT=9001
+    restart: unless-stopped
+    networks:
+      transcript-network:
+        aliases:
+          - transcripts-internal
+      crown-network:
+        aliases:
+          - transcripts-external
+    command: python app/main_flask_ui.py
+
+  db:
+    image: ankane/pgvector:latest
+    container_name: transcriptdb
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=transcripts
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d
+    restart: unless-stopped
+    networks:
+      transcript-network:
+        aliases:
+          - transcriptdb-internal
+      crown-network:
+        aliases:
+          - transcriptdb-external
+
+networks:
+  transcript-network:
+    driver: bridge
+  crown-network:
+    external: true
+
+volumes:
+  postgres_data:

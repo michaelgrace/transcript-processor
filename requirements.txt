@@ -1,12 +1,36 @@
-streamlit==1.31.0
-python-dotenv==1.0.0
-openai==0.28.0  # Downgraded to last version with ChatCompletion support
-sqlalchemy==2.0.25
-pysrt==1.1.2
-markdown==3.5.1
-psycopg2-binary
-pgvector
-markdown
-plotly
-pandas
-PyPDF2==3.0.1
+# --- Core Web Frameworks ---
+fastapi           # For API service
+flask             # For Flask UI or API
+streamlit==1.31.0 # For Streamlit UI
+
+# --- ASGI/WSGI Servers ---
+uvicorn           # For FastAPI (ASGI server)
+gunicorn          # For production multi-worker (optional)
+
+# --- HTTP & Form Handling ---
+requests          # For HTTP requests between services
+python-multipart  # For FastAPI file/form uploads
+
+# --- Database & ORM ---
+psycopg2-binary   # PostgreSQL driver
+sqlalchemy==2.0.25 # ORM (if used)
+pgvector          # For vector search in Postgres
+
+# --- Data Processing ---
+pysrt             # For SRT subtitle parsing
+PyPDF2==3.0.1     # For PDF parsing
+pandas            # For dataframes/analytics
+plotly            # For charts/visualizations
+
+# --- AI/LLM ---
+openai==0.28.0    # For OpenAI API
+
+# --- Utilities ---
+python-dotenv==1.0.0 # For .env support
+markdown==3.5.1      # For markdown processing
+
+# --- Security (optional, for JWT/OAuth2) ---
+pyjwt             # For JWT auth (optional, if you add auth)
+python-jose       # For JWT/OAuth2 (optional, if you add auth)
+passlib[bcrypt]   # For password hashing (optional)
+cryptography      # For advanced crypto (optional)

@@ -1,0 +1,86 @@
+body {
+    background-color: #181a1b;
+    color: #e0e0e0;
+    font-family: 'Segoe UI', 'Roboto', 'Arial', sans-serif;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    color: #f5f5f5;
+}
+
+a, a:visited {
+    color: #4fc3f7;
+}
+
+.container, .main-content {
+    background: #23272b;
+    border-radius: 12px;
+    padding: 2rem;
+    margin-top: 2rem;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.5);
+}
+
+input, select, textarea, button {
+    background: #23272b;
+    color: #e0e0e0;
+    border: 1px solid #444;
+    border-radius: 6px;
+    padding: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+input[type="file"] {
+    background: #23272b;
+    color: #e0e0e0;
+}
+
+input:focus, select:focus, textarea:focus, button:focus {
+    outline: none;
+    border-color: #4fc3f7;
+}
+
+.btn, button, .form-control, .form-select {
+    transition: background 0.2s, color 0.2s, border 0.2s;
+}
+
+.btn-primary, button[type="submit"] {
+    background: #4fc3f7;
+    color: #181a1b;
+    border: none;
+}
+
+.btn-primary:hover, button[type="submit"]:hover {
+    background: #0288d1;
+    color: #fff;
+}
+
+.form-check-input:checked {
+    background-color: #4fc3f7;
+    border-color: #4fc3f7;
+}
+
+pre, code, textarea {
+    background: #23272b;
+    color: #e0e0e0;
+    border: 1px solid #444;
+    border-radius: 6px;
+}
+
+.alert {
+    background: #23272b;
+    color: #ffb74d;
+    border-left: 4px solid #ffb74d;
+}
+
+hr {
+    border-top: 1px solid #444;
+}
+
+::-webkit-scrollbar {
+    width: 8px;
+    background: #23272b;
+}
+::-webkit-scrollbar-thumb {
+    background: #444;
+    border-radius: 4px;
+}

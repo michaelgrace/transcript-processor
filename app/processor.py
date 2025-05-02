@@ -227,13 +227,30 @@ def rewrite_transcript(content, options):
     blacklisted_terms = [
         "realm",
         "delve", 
+        "dive deep",
+        "dive into",
         "dive in",
+        "journey",
+        "explore",  
+        "Welcome to our exploration",   
+        "Welcome to our journey",
+        "Welcome to our deep dive", 
+        "Welcome to our realm",
+        "Welcome to our discussion",
+        "Welcome to our analysis",
         "Welcome to our exploration",
+        "Welcome to our analysis",
         "Let's explore",
-        "In conclusion",
-        "Have you ever wondered",
+        "In conclusion",                
         "What if I told you",
+        "What if I said",
+        "What if I shared",
+        "In conclusion",        
+        "In summary",
+        "In closing",
         "profound"
+        
+
     ]
     
     # Build the system prompt based on selected options
