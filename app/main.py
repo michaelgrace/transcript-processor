@@ -91,6 +91,15 @@ div[data-testid="stMultiSelect"] {
 st.title("Transcript Processor")
 st.write("Upload an SRT file or text transcript to convert it into a readable format.")
 
+# Set up defaults from session state, or use hardcoded defaults if not present
+add_paragraphs = st.session_state.get("add_paragraphs", True)
+add_headings = st.session_state.get("add_headings", False)
+fix_grammar = st.session_state.get("fix_grammar", True)
+highlight_key_points = st.session_state.get("highlight_key_points", True)
+format_style = st.session_state.get("format_style", "Article")
+rewrite_options = st.session_state.get("rewrite_options", [])
+uniqueness_level = st.session_state.get("uniqueness_level", 0.7)
+
 # Formatting options section
 with st.expander("Formatting Options", expanded=False):
     st.write("Select the formatting elements to apply:")
@@ -99,24 +108,24 @@ with st.expander("Formatting Options", expanded=False):
     with col1:
         add_paragraphs = st.checkbox(
             "Paragraph Structure", 
-            value=True,
+            value=add_paragraphs,
             help="Organize content into logical paragraphs based on topics"
         )
         add_headings = st.checkbox(
             "Add Headings for Topics", 
-            value=True,
+            value=add_headings,
             help="Insert section headings to highlight main topics"
         )
     
     with col2:
         fix_grammar = st.checkbox(
             "Fix Grammar & Punctuation", 
-            value=True,
+            value=fix_grammar,
             help="Correct grammar and punctuation while preserving meaning"
         )
         highlight_key_points = st.checkbox(
             "Highlight Key Points", 
-            value=True,
+            value=highlight_key_points,
             help="Bold important concepts and conclusions"
         )
     
@@ -124,10 +133,10 @@ with st.expander("Formatting Options", expanded=False):
         "Document Style",
         ["Article", "Transcript", "Meeting Notes", "Academic"],
         horizontal=True,
-        index=0
+        index=["Article", "Transcript", "Meeting Notes", "Academic"].index(format_style)
     )
 
-    # Add rewrite options here
+    # Rewrite options as multiselect (already implemented)
     rewrite_options = st.multiselect(
         "Rewrite Style Options",
         [
@@ -140,7 +149,17 @@ with st.expander("Formatting Options", expanded=False):
             "Shorter",
             "Longer"
         ],
+        default=rewrite_options,
         help="Choose one or more rewrite styles to apply to the processed content."
+    )
+
+    uniqueness_level = st.number_input(
+        "Uniqueness Level (AI Creativity)",
+        min_value=0.0,
+        max_value=1.0,
+        value=uniqueness_level,
+        step=0.05,
+        help="Increase for more creative and unique rewriting. Lower for more literal/faithful output."
     )
 
 if st.session_state.user_role == "admin":
@@ -249,7 +268,8 @@ with tab_upload:
                     highlight_key_points,
                     format_style,
                     is_binary=True,
-                    rewrite_options=rewrite_options  # Pass rewrite options
+                    rewrite_options=rewrite_options,
+                    temperature=uniqueness_level  # Pass to processor
                 )
                 
                 # Also extract text for display in the original content tab
@@ -272,7 +292,8 @@ with tab_upload:
                         fix_grammar,
                         highlight_key_points,
                         format_style,
-                        rewrite_options=rewrite_options  # Pass rewrite options
+                        rewrite_options=rewrite_options,
+                        temperature=uniqueness_level  # Pass to processor
                     )
                     
                     # Log success
@@ -282,6 +303,15 @@ with tab_upload:
                     else:
                         st.error("Processing failed - no content returned")
 
+            # Save the user's selections to session state
+            st.session_state["add_paragraphs"] = add_paragraphs
+            st.session_state["add_headings"] = add_headings
+            st.session_state["fix_grammar"] = fix_grammar
+            st.session_state["highlight_key_points"] = highlight_key_points
+            st.session_state["format_style"] = format_style
+            st.session_state["rewrite_options"] = rewrite_options
+            st.session_state["uniqueness_level"] = uniqueness_level
+
             # Create tabs for original and processed content
             tab2, tab1 = st.tabs(["Processed Content", "Original Content"])
             
@@ -289,19 +319,21 @@ with tab_upload:
                 st.text_area("Original Content", file_content, height=300, key="upload_original_content")
             
             with tab2:
-                # Display processed content - no need to process again!
-                if "#" in processed_content or "**" in processed_content or "*" in processed_content:
-                    st.markdown(processed_content)
-                    
-                    # Download button
-                    st.download_button(
-                        "Download Markdown",
-                        processed_content,
-                        file_name=f"{os.path.splitext(uploaded_file.name)[0]}_formatted.md",
-                        mime="text/markdown"
-                    )
-                else:
-                    st.text_area("Processed Content", processed_content, height=300, key="upload_processed_content")
+                # Editable processed content
+                edited_processed_content = st.text_area(
+                    "Processed Content (editable)", 
+                    value=processed_content, 
+                    height=300, 
+                    key="upload_processed_content_edit"
+                )
+                
+                # Download button
+                st.download_button(
+                    "Download Markdown",
+                    edited_processed_content,
+                    file_name=f"{os.path.splitext(uploaded_file.name)[0]}_formatted.md",
+                    mime="text/markdown"
+                )
                     
                 # Save button
                 if st.button("Save to Database"):
@@ -312,7 +344,7 @@ with tab_upload:
                     transcript_id = save_transcript(
                         filename=uploaded_file.name,
                         original_content=file_content,
-                        processed_content=processed_content,
+                        processed_content=edited_processed_content,  # Use edited content
                         format_style=format_style,
                         source_type=source_type
                     )
@@ -321,7 +353,7 @@ with tab_upload:
                     if transcript_id is not None:
                         # Generate and store metadata
                         with st.spinner("Analyzing content metadata..."):
-                            metadata = analyze_transcript_metadata(processed_content)
+                            metadata = analyze_transcript_metadata(edited_processed_content)
                             if metadata:
                                 success = save_transcript_metadata(transcript_id, metadata)
                                 if not success:
@@ -337,7 +369,8 @@ with tab_upload:
                                 "add_headings": add_headings,
                                 "fix_grammar": fix_grammar,
                                 "highlight_key_points": highlight_key_points,
-                                "rewrite_options": rewrite_options
+                                "rewrite_options": rewrite_options,
+                                "uniqueness_level": uniqueness_level
                             }
                         )
                         
@@ -370,11 +403,21 @@ with tab_paste:
                     highlight_key_points,
                     format_style,
                     is_binary=False,
-                    rewrite_options=rewrite_options  # Pass rewrite options
+                    rewrite_options=rewrite_options,
+                    temperature=uniqueness_level  # Pass to processor
                 )
                 st.session_state["pasted_processed_content"] = processed_content
                 st.session_state["pasted_original_content"] = pasted_text
                 st.success("Processing complete!")
+
+                # Save the user's selections to session state
+                st.session_state["add_paragraphs"] = add_paragraphs
+                st.session_state["add_headings"] = add_headings
+                st.session_state["fix_grammar"] = fix_grammar
+                st.session_state["highlight_key_points"] = highlight_key_points
+                st.session_state["format_style"] = format_style
+                st.session_state["rewrite_options"] = rewrite_options
+                st.session_state["uniqueness_level"] = uniqueness_level
 
     # Show processed content if available
     if st.session_state.get("pasted_processed_content"):
@@ -382,12 +425,17 @@ with tab_paste:
         with tab1:
             st.text_area("Original Content", st.session_state.get("pasted_original_content", ""), height=300, key="pasted_original_content_display")
         with tab2:
-            st.markdown(st.session_state["pasted_processed_content"])
-            # Use the pasted_title variable directly
+            # Editable processed content
+            edited_paste_content = st.text_area(
+                "Processed Content (editable)",
+                value=st.session_state["pasted_processed_content"],
+                height=300,
+                key="pasted_processed_content_edit"
+            )
             download_title = pasted_title.strip() or "pasted_content"
             st.download_button(
                 "Download Text",
-                st.session_state["pasted_processed_content"],
+                edited_paste_content,
                 file_name=f"{download_title}.txt",
                 mime="text/plain"
             )
@@ -396,13 +444,13 @@ with tab_paste:
                 transcript_id = save_transcript(
                     filename=download_title,
                     original_content=st.session_state["pasted_original_content"],
-                    processed_content=st.session_state["pasted_processed_content"],
+                    processed_content=edited_paste_content,  # Use edited content
                     format_style=format_style,
                     source_type="pasted"
                 )
                 if transcript_id is not None:
                     with st.spinner("Analyzing content metadata..."):
-                        metadata = analyze_transcript_metadata(st.session_state["pasted_processed_content"])
+                        metadata = analyze_transcript_metadata(edited_paste_content)
                         if metadata:
                             save_transcript_metadata(transcript_id, metadata)
                     log_analytics_event(
@@ -414,7 +462,8 @@ with tab_paste:
                             "add_headings": add_headings,
                             "fix_grammar": fix_grammar,
                             "highlight_key_points": highlight_key_points,
-                            "rewrite_options": rewrite_options
+                            "rewrite_options": rewrite_options,
+                            "uniqueness_level": uniqueness_level
                         }
                     )
                     st.success(f"Saved transcript with ID: {transcript_id}")

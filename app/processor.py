@@ -35,7 +35,7 @@ def process_text(content, add_paragraphs=True, add_headings=True, fix_grammar=Tr
 
 def format_text(
     text, add_paragraphs=True, add_headings=True, fix_grammar=True, highlight_key_points=True,
-    format_style="Article", rewrite_options=None
+    format_style="Article", rewrite_options=None, temperature=0.3
 ):
     """Format text using OpenAI API"""
     
@@ -109,7 +109,7 @@ def format_text(
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Please format this transcript:\n\n{text}"}
             ],
-            temperature=0.3  # Lower temperature for more consistent formatting
+            temperature=temperature  # Use passed-in temperature
         )
         
         formatted_text = response.choices[0].message["content"]
@@ -120,7 +120,7 @@ def format_text(
 
 def detect_and_process(
     content, filename, add_paragraphs=True, add_headings=True, fix_grammar=True, highlight_key_points=True,
-    format_style="Article", is_binary=False, rewrite_options=None
+    format_style="Article", is_binary=False, rewrite_options=None, temperature=0.3
 ):
     """
     Detect file type and process accordingly
@@ -143,7 +143,8 @@ def detect_and_process(
             fix_grammar=fix_grammar,
             highlight_key_points=highlight_key_points,
             format_style=format_style,
-            rewrite_options=rewrite_options
+            rewrite_options=rewrite_options,
+            temperature=temperature
         )
     # Process SRT files
     elif file_extension == '.srt':
@@ -167,7 +168,8 @@ def detect_and_process(
             fix_grammar=fix_grammar,
             highlight_key_points=highlight_key_points,
             format_style=format_style,
-            rewrite_options=rewrite_options
+            rewrite_options=rewrite_options,
+            temperature=temperature
         )
     
     # Adjust heading sizes as the final step
@@ -212,7 +214,8 @@ def generate_post_ideas(transcript_content):
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            temperature=0.7,  # Higher temperature for more creativity
+            # Higher temperature for more creativity
+            temperature=0.7,
             max_tokens=2048
         )
         
@@ -263,6 +266,13 @@ def rewrite_transcript(content, options):
         "dive in",
         "journey",
         "explore",  
+        "Let's explore",         
+        "What if I told you",
+        "What if I said",
+        "What if I shared",
+        "Today, we're exploring a fascinating concept",
+        "Today, we're diving into a fascinating concept",
+        "Today, we're delving into a fascinating concept",          
         "Welcome to our exploration",   
         "Welcome to our journey",
         "Welcome to our deep dive", 
@@ -270,18 +280,11 @@ def rewrite_transcript(content, options):
         "Welcome to our discussion",
         "Welcome to our analysis",
         "Welcome to our exploration",
-        "Welcome to our analysis",
-        "Let's explore",
-        "In conclusion",                
-        "What if I told you",
-        "What if I said",
-        "What if I shared",
+        "Welcome to our analysis",        
         "In conclusion",        
         "In summary",
         "In closing",
         "profound"
-        
-
     ]
     
     # Build the system prompt based on selected options
@@ -389,17 +392,25 @@ def analyze_transcript_metadata(content):
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Analyze this transcript:\n\n{content[:8000]}"}
             ],
-            temperature=0.1  # Low temperature for consistent analysis
+            temperature=0.1,  # Low temperature for consistent analysis
+            response_format={"type": "json_object"}  # <-- Force JSON output
         )
         
         # Extract and parse JSON response
         metadata_json = response.choices[0].message["content"]
+        if not metadata_json.strip():
+            print("OpenAI returned empty metadata response:", metadata_json)
+            raise ValueError("AI returned empty metadata response")
         import json
         metadata = json.loads(metadata_json)
-        
         return metadata
     except Exception as e:
         print(f"Error analyzing transcript metadata: {e}")
+        # Optionally print the raw response for debugging
+        try:
+            print("Raw OpenAI response:", metadata_json)
+        except Exception:
+            pass
         return {
             "topics": [],
             "keywords": [],
