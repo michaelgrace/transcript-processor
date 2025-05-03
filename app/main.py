@@ -4,6 +4,7 @@ import os
 import plotly.express as px
 from datetime import datetime, timedelta
 import sys
+import requests
 
 # Ensure the app directory is in sys.path for module resolution in all environments
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -15,30 +16,20 @@ st.set_page_config(
     layout="wide"
 )
 
-try:
-    from app.processor import detect_and_process, generate_post_ideas, rewrite_transcript, analyze_transcript_metadata
-except ImportError:
-    from processor import detect_and_process, generate_post_ideas, rewrite_transcript, analyze_transcript_metadata
-
-from database import (
-    save_transcript, get_transcript, get_all_transcripts, delete_transcript, 
-    save_post_ideas, get_post_ideas, delete_post_ideas,
-    save_rewrite, get_rewrite, delete_rewrite,
-    save_transcript_metadata, get_transcript_metadata, 
-    log_analytics_event, get_analytics_summary
-)
-
-# In main.py, after imports
-from database import ensure_tables_exist
-import threading
-
-# Run database initialization in background thread so it doesn't block the UI
-threading.Thread(target=ensure_tables_exist, daemon=True).start()
+API_URL = os.getenv("API_URL", "http://api:8000")  # Or your API endpoint
 
 # Add this before you use st.session_state.user_role anywhere in your code
 # Preferably close to the top, after st.set_page_config
 if 'user_role' not in st.session_state:
     st.session_state.user_role = "admin"  # Default to admin for now
+
+# Initialize session state for expandable/history features if not present
+if 'show_ideas_tab' not in st.session_state:
+    st.session_state.show_ideas_tab = {}
+if 'generating_ideas' not in st.session_state:
+    st.session_state.generating_ideas = {}
+if 'post_ideas' not in st.session_state:
+    st.session_state.post_ideas = {}
 
 # Configure the page with minimal padding
 # Enhanced CSS with stronger hiding rules for branding and subtle button styling
@@ -168,8 +159,12 @@ if st.session_state.user_role == "admin":
         # Add before the "analytic charts"
         st.info(f"Using AI model: {os.getenv('AI_MODEL', 'Not specified')} | API Key configured: {'Yes' if os.getenv('API_KEY') else 'No'}")
 
-        analytics = get_analytics_summary()
-        
+        response = requests.get(f"{API_URL}/analytics/")
+        if response.ok:
+            analytics = response.json()
+        else:
+            analytics = {}
+
         # Create a 2-column layout for charts
         col1, col2 = st.columns(2)
         
@@ -251,57 +246,26 @@ with tab_upload:
     if uploaded_file is not None:
         # Read file content
         try:
-            if uploaded_file.name.lower().endswith('.pdf'):
-                # Read file content as binary for PDFs
-                file_content_binary = uploaded_file.read()
-                
-                # Log for debugging
-                st.info(f"Processing PDF file: {uploaded_file.name}")
-                
-                # Process the binary content directly
-                processed_content = detect_and_process(
-                    file_content_binary,
-                    uploaded_file.name,
-                    add_paragraphs,
-                    add_headings,
-                    fix_grammar,
-                    highlight_key_points,
-                    format_style,
-                    is_binary=True,
-                    rewrite_options=rewrite_options,
-                    temperature=uniqueness_level  # Pass to processor
-                )
-                
-                # Also extract text for display in the original content tab
-                from processor import extract_text_from_pdf
-                file_content = extract_text_from_pdf(file_content_binary)
+            files = {"file": uploaded_file}
+            data = {
+                "add_paragraphs": str(add_paragraphs).lower(),
+                "add_headings": str(add_headings).lower(),
+                "fix_grammar": str(fix_grammar).lower(),
+                "highlight_key_points": str(highlight_key_points).lower(),
+                "format_style": format_style,
+                "rewrite_options": rewrite_options,
+                "uniqueness_level": uniqueness_level
+            }
+            response = requests.post(f"{API_URL}/upload/", files=files, data=data)
+            if response.ok:
+                result = response.json()
+                processed_content = result["processed_content"]
+                file_content = result["original_content"]
+                transcript_id = result["transcript_id"]
+                metadata = result.get("metadata", {})
+                st.success("Processing complete!")
             else:
-                # For non-PDF files, read as text
-                file_content = uploaded_file.read().decode("utf-8")
-                
-                # Log for debugging
-                st.info(f"Processing {uploaded_file.name.split('.')[-1].upper()} file: {uploaded_file.name}")
-                
-                # Process the file with formatting options
-                with st.spinner("Processing transcript... This may take a moment."):
-                    processed_content = detect_and_process(
-                        file_content, 
-                        uploaded_file.name,
-                        add_paragraphs,
-                        add_headings,
-                        fix_grammar,
-                        highlight_key_points,
-                        format_style,
-                        rewrite_options=rewrite_options,
-                        temperature=uniqueness_level  # Pass to processor
-                    )
-                    
-                    # Log success
-                    if processed_content:
-                        st.success("Processing complete!")
-                        print(f"Processed content length: {len(processed_content)}")
-                    else:
-                        st.error("Processing failed - no content returned")
+                st.error("API error: could not process file")
 
             # Save the user's selections to session state
             st.session_state["add_paragraphs"] = add_paragraphs
@@ -337,46 +301,14 @@ with tab_upload:
                     
                 # Save button
                 if st.button("Save to Database"):
-                    # Determine source type based on file extension
-                    source_type = "pdf" if uploaded_file.name.lower().endswith('.pdf') else "transcript"
-                    
-                    # Save transcript to database
-                    transcript_id = save_transcript(
-                        filename=uploaded_file.name,
-                        original_content=file_content,
-                        processed_content=edited_processed_content,  # Use edited content
-                        format_style=format_style,
-                        source_type=source_type
+                    response = requests.patch(
+                        f"{API_URL}/transcript/{transcript_id}",
+                        json={"processed_content": edited_processed_content}
                     )
-                    
-                    # Only proceed if save was successful
-                    if transcript_id is not None:
-                        # Generate and store metadata
-                        with st.spinner("Analyzing content metadata..."):
-                            metadata = analyze_transcript_metadata(edited_processed_content)
-                            if metadata:
-                                success = save_transcript_metadata(transcript_id, metadata)
-                                if not success:
-                                    st.warning("Metadata analysis saved with errors")
-                        
-                        # Log analytics event
-                        log_analytics_event(
-                            transcript_id, 
-                            "format", 
-                            {
-                                "format_style": format_style,
-                                "add_paragraphs": add_paragraphs,
-                                "add_headings": add_headings,
-                                "fix_grammar": fix_grammar,
-                                "highlight_key_points": highlight_key_points,
-                                "rewrite_options": rewrite_options,
-                                "uniqueness_level": uniqueness_level
-                            }
-                        )
-                        
-                        st.success(f"Saved transcript with ID: {transcript_id}")
+                    if response.ok:
+                        st.success("Processed content updated!")
                     else:
-                        st.error("Failed to save transcript to database. Check logs for details.")
+                        st.error("Failed to update transcript.")
         except Exception as e:
             st.error(f"Error processing file: {str(e)}")
             import traceback
@@ -394,21 +326,27 @@ with tab_paste:
             st.warning("Please specify a title.")
         else:
             with st.spinner("Processing pasted text..."):
-                processed_content = detect_and_process(
-                    pasted_text,
-                    pasted_title,  # Use title as filename for processing
-                    add_paragraphs,
-                    add_headings,
-                    fix_grammar,
-                    highlight_key_points,
-                    format_style,
-                    is_binary=False,
-                    rewrite_options=rewrite_options,
-                    temperature=uniqueness_level  # Pass to processor
-                )
-                st.session_state["pasted_processed_content"] = processed_content
-                st.session_state["pasted_original_content"] = pasted_text
-                st.success("Processing complete!")
+                data = {
+                    "text": pasted_text,
+                    "title": pasted_title,
+                    "add_paragraphs": str(add_paragraphs).lower(),
+                    "add_headings": str(add_headings).lower(),
+                    "fix_grammar": str(fix_grammar).lower(),
+                    "highlight_key_points": str(highlight_key_points).lower(),
+                    "format_style": format_style,
+                    "rewrite_options": rewrite_options,
+                    "uniqueness_level": uniqueness_level
+                }
+                response = requests.post(f"{API_URL}/process_text/", json=data)
+                if response.ok:
+                    result = response.json()
+                    processed_content = result["processed_content"]
+                    transcript_id = result["transcript_id"]
+                    st.session_state["pasted_processed_content"] = processed_content
+                    st.session_state["pasted_original_content"] = pasted_text
+                    st.success("Processing complete!")
+                else:
+                    st.error("API error: could not process text.")
 
                 # Save the user's selections to session state
                 st.session_state["add_paragraphs"] = add_paragraphs
@@ -441,63 +379,25 @@ with tab_paste:
             )
             # Save to DB button
             if st.button("Save to Database", key="save_pasted_to_db"):
-                transcript_id = save_transcript(
-                    filename=download_title,
-                    original_content=st.session_state["pasted_original_content"],
-                    processed_content=edited_paste_content,  # Use edited content
-                    format_style=format_style,
-                    source_type="pasted"
+                response = requests.patch(
+                    f"{API_URL}/transcript/{transcript_id}",
+                    json={"processed_content": edited_paste_content}
                 )
-                if transcript_id is not None:
-                    with st.spinner("Analyzing content metadata..."):
-                        metadata = analyze_transcript_metadata(edited_paste_content)
-                        if metadata:
-                            save_transcript_metadata(transcript_id, metadata)
-                    log_analytics_event(
-                        transcript_id,
-                        "format",
-                        {
-                            "format_style": format_style,
-                            "add_paragraphs": add_paragraphs,
-                            "add_headings": add_headings,
-                            "fix_grammar": fix_grammar,
-                            "highlight_key_points": highlight_key_points,
-                            "rewrite_options": rewrite_options,
-                            "uniqueness_level": uniqueness_level
-                        }
-                    )
-                    st.success(f"Saved transcript with ID: {transcript_id}")
+                if response.ok:
+                    st.success("Processed content updated!")
                 else:
-                    st.error("Failed to save transcript to database. Check logs for details.")
+                    st.error("Failed to update transcript.")
 
 # History section
 st.divider()
 st.subheader("Previously Processed Transcripts")
 
-# Initialize session state
-if 'show_ideas_tab' not in st.session_state:
-    st.session_state.show_ideas_tab = {}
-    
-if 'generating_ideas' not in st.session_state:
-    st.session_state.generating_ideas = {}
+response = requests.get(f"{API_URL}/transcripts/")
+if response.ok:
+    transcripts = response.json()
+else:
+    transcripts = []
 
-if 'post_ideas' not in st.session_state:
-    st.session_state.post_ideas = {}
-
-# Add this near your other session state initialization
-if 'user_role' not in st.session_state:
-    st.session_state.user_role = "admin"  # Default to admin for now, you can implement proper auth later
-
-# Handle document deletion
-if 'delete_transcript' in st.session_state and st.session_state.delete_transcript:
-    delete_transcript(st.session_state.delete_transcript)
-    # Also delete associated rewrites and ideas
-    delete_rewrite(st.session_state.delete_transcript)
-    delete_post_ideas(st.session_state.delete_transcript)
-    st.session_state.delete_transcript = None
-    st.rerun()
-
-transcripts = get_all_transcripts()
 if transcripts:
     for i, transcript in enumerate(transcripts):
         delete_key = f"delete_{transcript['id']}"
@@ -508,13 +408,18 @@ if transcripts:
             # Initialize state for this transcript if needed
             if transcript['id'] not in st.session_state.show_ideas_tab:
                 # Check if post ideas exist for this transcript in the database
-                existing_ideas = get_post_ideas(transcript['id'])
-                
-                # If ideas exist in DB, show the tab automatically
-                st.session_state.show_ideas_tab[transcript['id']] = existing_ideas is not None
+                response = requests.get(f"{API_URL}/post_ideas/{transcript['id']}")
+                if response.ok:
+                    existing_ideas = response.json()
+                    # Fix: If API returns an object with 'post_ideas' key, extract it
+                    if isinstance(existing_ideas, dict) and "post_ideas" in existing_ideas:
+                        existing_ideas = existing_ideas["post_ideas"]
+                else:
+                    existing_ideas = None
+
+                st.session_state.show_ideas_tab[transcript['id']] = bool(existing_ideas)
                 st.session_state.generating_ideas[transcript['id']] = False
-                
-                # Store the ideas content in session state if available
+
                 if existing_ideas:
                     st.session_state.post_ideas[transcript['id']] = existing_ideas
                 else:
@@ -566,8 +471,12 @@ if transcripts:
                 
                 # Add delete button below download with same styling
                 if st.button("Delete Transcript", key=delete_key):
-                    st.session_state.delete_transcript = transcript['id']
-                    st.rerun()
+                    response = requests.delete(f"{API_URL}/transcript/{transcript['id']}")
+                    if response.ok:
+                        st.success("Transcript deleted successfully!")
+                        st.rerun()
+                    else:
+                        st.error("Failed to delete transcript.")
                 
                 # Add Post Ideas button
                 if st.button("Post Ideas", key=ideas_key):
@@ -582,16 +491,16 @@ if transcripts:
                     # Check if we need to generate ideas or load from database
                     if st.session_state.generating_ideas[transcript['id']]:
                         with st.spinner("Generating post ideas..."):
-                            # Either load existing ideas or generate new ones
-                            existing_ideas = get_post_ideas(transcript['id'])
-                            
-                            if existing_ideas:
-                                st.session_state.post_ideas[transcript['id']] = existing_ideas
-                            else:
-                                # Generate new ideas
-                                ideas_content = generate_post_ideas(transcript['processed_content'])
+                            response = requests.post(
+                                f"{API_URL}/generate_post_ideas/",
+                                json={"processed_content": transcript['processed_content']}
+                            )
+                            if response.ok:
+                                ideas_content = response.json()["post_ideas"]
                                 st.session_state.post_ideas[transcript['id']] = ideas_content
-                                
+                            else:
+                                st.error("Failed to generate post ideas.")
+                            
                             # Reset the generating flag
                             st.session_state.generating_ideas[transcript['id']] = False
                     
@@ -611,38 +520,27 @@ if transcripts:
                         
                         with col1:
                             if st.button("Save Ideas", key=f"save_ideas_{transcript['id']}"):
-                                try:
-                                    # DIRECTLY access the text area value by its key
-                                    current_content = st.session_state.get(f"post_ideas_text_{transcript['id']}", "")
-                                    
-                                    # Debug print
-                                    print(f"DEBUG - Saving content length: {len(current_content)}")
-                                    print(f"DEBUG - First 50 chars: {current_content[:50]}")
-                                    
-                                    if current_content:
-                                        success = save_post_ideas(transcript['id'], current_content)
-                                        if success:
-                                            st.success("Post ideas saved successfully!")
-                                            st.session_state.post_ideas[transcript['id']] = current_content
-                                        else:
-                                            st.error("Failed to save post ideas")
-                                    else:
-                                        st.warning("No content to save")
-                                except Exception as e:
-                                    st.error(f"Error saving post ideas: {str(e)}")
-                                    print(f"Exception details: {e}")
+                                response = requests.patch(
+                                    f"{API_URL}/post_ideas/{transcript['id']}",
+                                    json={"post_ideas": edited_content}
+                                )
+                                if response.ok:
+                                    st.success("Post ideas saved successfully!")
+                                    st.session_state.post_ideas[transcript['id']] = edited_content
+                                else:
+                                    st.error("Failed to save post ideas.")
                         
                         with col2:
                             # Delete button
                             if st.button("Delete Ideas", key=f"delete_ideas_{transcript['id']}"):
-                                success = delete_post_ideas(transcript['id'])
-                                if success:
+                                response = requests.delete(f"{API_URL}/post_ideas/{transcript['id']}")
+                                if response.ok:
                                     st.success("Ideas deleted successfully")
                                     st.session_state.post_ideas.pop(transcript['id'], None)
                                     st.session_state.show_ideas_tab[transcript['id']] = False
                                     st.rerun()
                                 else:
-                                    st.error("Failed to delete ideas from database")
+                                    st.error("Failed to delete ideas from database.")
                         
                         with col3:
                             # Add download button
@@ -656,8 +554,9 @@ if transcripts:
 
             if st.session_state.user_role == "admin" and "metadata_tab" in locals():
                 with metadata_tab:
-                    metadata = get_transcript_metadata(transcript['id'])
-                    if metadata:
+                    response = requests.get(f"{API_URL}/metadata/{transcript['id']}")
+                    if response.ok:
+                        metadata = response.json()
                         col1, col2 = st.columns(2)
                         
                         with col1:
@@ -701,20 +600,30 @@ if transcripts:
                         # Button to refresh metadata analysis
                         if st.button("Refresh Metadata Analysis", key=f"refresh_metadata_{transcript['id']}"):
                             with st.spinner("Analyzing content..."):
-                                metadata = analyze_transcript_metadata(transcript['processed_content'])
-                                if metadata:
-                                    save_transcript_metadata(transcript['id'], metadata)
+                                response = requests.post(
+                                    f"{API_URL}/analyze_metadata/",
+                                    json={"processed_content": transcript['processed_content']}
+                                )
+                                if response.ok:
+                                    metadata = response.json()
                                     st.success("Metadata updated successfully!")
                                     st.rerun()
+                                else:
+                                    st.error("Failed to update metadata.")
                     else:
                         st.info("No metadata available for this transcript.")
                         if st.button("Generate Metadata", key=f"generate_metadata_{transcript['id']}"):
                             with st.spinner("Analyzing content..."):
-                                metadata = analyze_transcript_metadata(transcript['processed_content'])
-                                if metadata:
-                                    save_transcript_metadata(transcript['id'], metadata)
+                                response = requests.post(
+                                    f"{API_URL}/analyze_metadata/",
+                                    json={"processed_content": transcript['processed_content']}
+                                )
+                                if response.ok:
+                                    metadata = response.json()
                                     st.success("Metadata generated successfully!")
                                     st.rerun()
+                                else:
+                                    st.error("Failed to generate metadata.")
 
 else:
     st.info("No transcripts have been processed yet.")
