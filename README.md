@@ -80,6 +80,70 @@ docker-compose up --build
 docker-compose down
 ```
 
+---
+
+# Docker Build Error: `archive/tar: unknown file mode ?rwxr-xr-x`
+
+---
+
+## **What This Means**
+
+- This error occurs when Docker tries to build an image and encounters a file or directory with an **unsupported or corrupt file mode** (permissions/attributes) in your build context.
+- It often happens when copying files from Windows to WSL2, or when there are symlinks, special files, or permission issues in your project directory.
+
+---
+
+## **How to Fix**
+
+1. **Check for problematic files:**
+   - Run this in your project directory (in WSL2):
+     ```sh
+     find . -type l
+     ```
+   - This lists all symlinks. Remove any broken or unnecessary symlinks.
+
+2. **Check for files with odd permissions:**
+   - Run:
+     ```sh
+     find . -exec ls -l {} \; | grep '^?'
+     ```
+   - This lists files with unknown or corrupt permissions. Remove or fix them.
+
+3. **Clean up your build context:**
+   - Make sure you do **not** have `node_modules`, `.venv`, `.next`, or other large/binary folders in your build context.  
+   - These should be in your `.gitignore` and ideally in your `.dockerignore` as well.
+
+4. **Add a `.dockerignore` file** (if you don't have one) to exclude unnecessary files from the build context:
+   ```
+   node_modules
+   .next
+   .venv
+   __pycache__
+   *.pyc
+   .git
+   .DS_Store
+   ```
+   - Place this file in your project root.
+
+5. **Try the build again:**
+   ```sh
+   docker-compose build --no-cache
+   ```
+
+---
+
+## **Summary**
+
+- The error is caused by a file with an unsupported or corrupt mode in your build context.
+- Clean up symlinks, fix permissions, and use a `.dockerignore` to exclude unnecessary files.
+- This will make your build faster and more reliable.
+
+---
+
+**If you still see the error after these steps, let me know what files are listed by the `find` commands above.**
+
+---
+
 ## Contributing
 
 Contributions are welcome! Here's how you can contribute to the project:

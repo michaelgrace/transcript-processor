@@ -1,18 +1,29 @@
 # Dockerfile for Next.js (Chakra UI) frontend
-
 FROM node:20-alpine
 
 WORKDIR /app
 
+# Copy package files first for better caching
 COPY nextjs-ui/package*.json ./
 RUN npm install
 
-COPY nextjs-ui/ ./
+# Add node_modules to .dockerignore for better performance
+VOLUME /app/node_modules
 
-# Build the Next.js app
-RUN npm run build
+# Set environment variables for efficient hot reload on Windows
+ENV CHOKIDAR_USEPOLLING=true
+ENV WATCHPACK_POLLING=true
+ENV NODE_ENV=development
+
+# Copy the entrypoint script and make it executable
+COPY nextjs-ui/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Copy the rest of the code
+# This is done last to leverage Docker caching
+COPY nextjs-ui/ ./
 
 EXPOSE 3000
 
-# Start Next.js in production mode
-CMD ["npm", "start"]
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["npm", "run", "dev"]

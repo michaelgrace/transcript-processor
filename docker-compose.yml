@@ -71,11 +71,41 @@ services:
       - DB_PASSWORD=${POSTGRES_PASSWORD}
       - AI_MODEL=${AI_MODEL}
       - API_KEY=${API_KEY}
+      - PYTHONUNBUFFERED=1
     restart: unless-stopped
     networks:
       transcript-network:
         aliases:
           - transcripts-api-internal
+
+  nextjs-ui:
+    container_name: transcripts-nextjs-ui
+    build:
+      context: .
+      dockerfile: Dockerfile-ui
+    ports:
+      - "3000:3000"
+    volumes:
+      # Mount the source code, but exclude node_modules
+      - ./nextjs-ui:/app
+      - /app/node_modules
+    depends_on:
+      - api
+    environment:
+      - NEXT_PUBLIC_API_URL=http://api:8000
+      - WATCHPACK_POLLING=true
+      - CHOKIDAR_USEPOLLING=true
+      - NODE_ENV=development
+    restart: unless-stopped
+    networks:
+      transcript-network:
+        aliases:
+          - transcripts-nextjs-ui-internal
+      crown-network:
+        aliases:
+          - transcripts-nextjs-ui-external
+    # Don't override the ENTRYPOINT/CMD from Dockerfile
+    # command: npx next dev
 
   db:
     image: ankane/pgvector:latest

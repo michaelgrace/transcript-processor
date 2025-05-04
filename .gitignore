@@ -1,7 +1,9 @@
 # Environment
 .env
+.venv/
 venv/
 __pycache__/
+*.pyc
 *.py[cod]
 
 # Database
@@ -20,3 +22,7 @@ backup-project.ps1
 # folder
 .github/
 AIAAS/
+
+# Node.js
+node_modules/
+.next/
